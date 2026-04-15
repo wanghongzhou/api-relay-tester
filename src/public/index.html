@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>模型中转测试工具</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --surface: #ffffff; --border: #e1e4e8; --border2: #d0d4da;
+    --text: #1f2328; --text2: #656d76; --accent: #0969da; --accent-bg: #ddf4ff;
+    --green: #1a7f37; --green-bg: #dafbe1; --red: #cf222e; --red-bg: #ffebe9;
+    --yellow: #9a6700; --yellow-bg: #fff8c5; --gray: #6e7781; --gray-bg: #f0f1f3;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+         background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+
+  /* Header */
+  .header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
+  .header h1 { font-size: 22px; font-weight: 600; }
+  .header .tag { background: var(--accent-bg); color: var(--accent); padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; }
+
+  /* Card */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; }
+  .card h2 { font-size: 15px; font-weight: 600; margin-bottom: 12px; color: var(--text); }
+
+  /* Form */
+  .form-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
+  .form-row { display: grid; grid-template-columns: 1fr 2fr; gap: 12px; margin-top: 12px; }
+  label { font-size: 12px; font-weight: 500; color: var(--text2); margin-bottom: 3px; display: block; }
+  input, select { width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; color: var(--text); background: #fff; outline: none; }
+  input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(9,105,218,0.1); }
+
+  /* Model info bar */
+  .model-bar { display: flex; gap: 20px; flex-wrap: wrap; padding: 8px 12px; background: var(--gray-bg); border-radius: 6px; font-size: 12px; margin-top: 12px; }
+  .model-bar .item { color: var(--text2); }
+  .model-bar .item b { color: var(--text); font-weight: 500; }
+  .model-bar.unknown { background: var(--yellow-bg); color: var(--yellow); }
+
+  /* Test list */
+  .test-grid { display: flex; flex-direction: column; gap: 8px; }
+
+  .test-card { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .test-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: #fafbfc; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .test-header:hover { background: #f0f2f5; }
+  .test-header .left { display: flex; align-items: center; gap: 10px; }
+  .test-header .name { font-weight: 500; font-size: 13px; }
+  .test-header .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 500; }
+  .badge-idle { background: var(--gray-bg); color: var(--gray); }
+  .badge-running { background: var(--accent-bg); color: var(--accent); }
+  .badge-pass { background: var(--green-bg); color: var(--green); }
+  .badge-fail { background: var(--red-bg); color: var(--red); }
+  .badge-warn { background: var(--yellow-bg); color: var(--yellow); }
+  .badge-skip { background: var(--gray-bg); color: var(--gray); }
+  .badge-error { background: var(--red-bg); color: var(--red); }
+
+  .btn { padding: 6px 14px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; background: #fff; color: var(--text); transition: all 0.15s; }
+  .btn:hover:not(:disabled) { background: var(--gray-bg); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-primary:hover:not(:disabled) { background: #0860c4; }
+  .btn-sm { padding: 4px 10px; font-size: 11px; }
+  .btn-run-all { margin-top: 12px; }
+
+  .duration { font-size: 12px; color: var(--text2); min-width: 60px; text-align: right; }
+
+  /* Test body (expandable) */
+  .test-body { display: none; padding: 0; }
+  .test-body.open { display: block; }
+
+  /* Tabs inside test body */
+  .tabs { display: flex; border-bottom: 1px solid var(--border); background: #fafbfc; }
+  .tab { padding: 8px 16px; font-size: 12px; font-weight: 500; color: var(--text2); cursor: pointer; border-bottom: 2px solid transparent; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-content { display: none; padding: 12px 16px; }
+  .tab-content.active { display: block; }
+
+  /* Conclusion panel */
+  .conclusion { padding: 12px 16px; font-size: 13px; line-height: 1.6; }
+  .conclusion .status-line { font-weight: 600; margin-bottom: 4px; }
+  .conclusion .judgment { color: var(--text2); white-space: pre-wrap; }
+
+  /* Raw data */
+  .raw-block { background: #f6f8fa; border: 1px solid var(--border); border-radius: 6px; padding: 12px; font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto; color: var(--text); }
+
+  /* Summary bar */
+  .summary-bar { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+  .summary-bar .stat { text-align: center; }
+  .summary-bar .stat .num { font-size: 24px; font-weight: 700; }
+  .summary-bar .stat .lbl { font-size: 11px; color: var(--text2); }
+
+  /* Spinner */
+  .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.5s linear infinite; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .hidden { display: none !important; }
+  .mt8 { margin-top: 8px; }
+  .mt12 { margin-top: 12px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>模型中转测试工具</h1>
+    <span class="tag">v2.0</span>
+  </div>
+
+  <!-- Config -->
+  <div class="card">
+    <h2>配置</h2>
+    <div class="form-grid">
+      <div>
+        <label>基础地址（不含 /v1）</label>
+        <div style="display:flex;gap:6px;">
+          <select id="baseUrlPreset" style="width:auto;min-width:120px;" onchange="onBaseUrlPresetChange()">
+            <option value="https://api.favorais.com">api.favorais.com</option>
+            <option value="__custom__">自定义...</option>
+          </select>
+          <input type="text" id="baseUrl" placeholder="https://api.example.com">
+        </div>
+      </div>
+      <div>
+        <label>服务商</label>
+        <select id="provider">
+          <option value="">自动检测</option>
+          <option value="openai">OpenAI</option>
+          <option value="claude">Claude (Anthropic)</option>
+          <option value="gemini">Gemini (Google)</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <label>模型 ID</label>
+        <input type="text" id="modelId" placeholder="claude-opus-4-6" list="modelList">
+        <datalist id="modelList"></datalist>
+      </div>
+      <div>
+        <label>API 密钥 / 令牌</label>
+        <input type="password" id="apiKey" placeholder="sk-...">
+      </div>
+    </div>
+    <div id="modelBar" class="model-bar hidden"></div>
+    <div class="mt8" style="display:flex;flex-wrap:wrap;gap:16px;">
+      <div>
+        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text);">
+          <input type="checkbox" id="useStreaming" style="width:auto;accent-color:var(--accent);">
+          流式请求
+        </label>
+        <div style="font-size:11px;color:var(--text2);margin-top:2px;margin-left:22px;">
+          所有测试均使用 stream: true 发送请求
+        </div>
+      </div>
+      <div id="claudeCodeCLIOption" class="hidden" style="display:none;">
+        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text);">
+          <input type="checkbox" id="simulateClaudeCodeCLI" style="width:auto;accent-color:var(--accent);">
+          模拟 Claude Code CLI 工具请求
+        </label>
+        <div style="font-size:11px;color:var(--text2);margin-top:2px;margin-left:22px;">
+          携带 CLI 专属 Headers（User-Agent、Anthropic-Beta、X-App 等）
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom Request -->
+  <div class="card" style="padding:0;">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 20px;cursor:pointer;user-select:none;" onclick="toggleCustomBody()">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span class="badge" id="customBadge" style="display:none;"></span>
+        <h2 style="margin:0;font-size:15px;">自定义请求</h2>
+        <span class="duration" id="customDur"></span>
+      </div>
+      <span style="font-size:11px;color:var(--text2);" id="customToggleHint">展开 ▼</span>
+    </div>
+    <div class="test-body" id="customBody">
+      <div style="padding:0 20px 16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <label style="margin:0;">请求体 JSON（根据模型自动生成原生格式，可自行修改）</label>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-sm" onclick="event.stopPropagation();generateCustomJSON()">重新生成</button>
+            <button class="btn btn-sm btn-primary" id="customSendBtn" onclick="event.stopPropagation();sendCustomRequest()">发送请求</button>
+          </div>
+        </div>
+        <textarea id="customJSON" rows="12" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:12px;color:var(--text);resize:vertical;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;line-height:1.5;background:#f6f8fa;" spellcheck="false"></textarea>
+        <div id="customResult" class="mt8" style="display:none;">
+          <div style="display:flex;gap:8px;margin-bottom:6px;">
+            <button class="btn btn-sm" onclick="switchCustomTab('resp')" id="customTabResp" style="font-weight:500;">响应内容</button>
+            <button class="btn btn-sm" onclick="switchCustomTab('raw')" id="customTabRaw">原始响应</button>
+            <button class="btn btn-sm" onclick="copyCustomResult()">复制</button>
+          </div>
+          <div id="customRespContent" class="raw-block" style="max-height:300px;overflow-y:auto;"></div>
+          <div id="customRawContent" class="raw-block" style="max-height:300px;overflow-y:auto;display:none;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tests -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h2 style="margin:0">测试项目</h2>
+      <div>
+        <button class="btn btn-primary" id="runAllBtn" onclick="runAllTests()">全部测试</button>
+      </div>
+    </div>
+    <div class="test-grid mt12" id="testGrid"></div>
+  </div>
+
+  <!-- Summary -->
+  <div class="card hidden" id="summaryCard">
+    <h2>汇总</h2>
+    <div class="summary-bar" id="summaryBar"></div>
+  </div>
+</div>
+
+<script>
+// ── State ──
+let TESTS = [];
+let testResults = {};
+
+// ── LocalStorage persistence ──
+const STORAGE_KEY = 'apitest_config';
+const PRESET_URLS = ['https://api.favorais.com'];
+
+function saveConfig() {
+  const cfg = {
+    baseUrl: document.getElementById('baseUrl').value,
+    modelId: document.getElementById('modelId').value,
+    apiKey: document.getElementById('apiKey').value,
+    provider: document.getElementById('provider').value,
+    simulateClaudeCodeCLI: document.getElementById('simulateClaudeCodeCLI').checked,
+    useStreaming: document.getElementById('useStreaming').checked,
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+}
+
+function loadConfig() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      // No saved config — use first preset as default
+      document.getElementById('baseUrl').value = PRESET_URLS[0];
+      syncBaseUrlPreset();
+      return;
+    }
+    const cfg = JSON.parse(raw);
+    document.getElementById('baseUrl').value = cfg.baseUrl || PRESET_URLS[0];
+    document.getElementById('modelId').value = cfg.modelId || '';
+    document.getElementById('apiKey').value = cfg.apiKey || '';
+    document.getElementById('provider').value = cfg.provider || '';
+    document.getElementById('simulateClaudeCodeCLI').checked = !!cfg.simulateClaudeCodeCLI;
+    document.getElementById('useStreaming').checked = !!cfg.useStreaming;
+    syncBaseUrlPreset();
+  } catch {
+    document.getElementById('baseUrl').value = PRESET_URLS[0];
+    syncBaseUrlPreset();
+  }
+}
+
+/** Sync the preset dropdown to match the current baseUrl input */
+function syncBaseUrlPreset() {
+  const url = document.getElementById('baseUrl').value.trim();
+  const preset = document.getElementById('baseUrlPreset');
+  if (PRESET_URLS.includes(url)) {
+    preset.value = url;
+    document.getElementById('baseUrl').style.display = 'none';
+  } else {
+    preset.value = '__custom__';
+    document.getElementById('baseUrl').style.display = '';
+  }
+}
+
+function onBaseUrlPresetChange() {
+  const preset = document.getElementById('baseUrlPreset');
+  const input = document.getElementById('baseUrl');
+  if (preset.value === '__custom__') {
+    input.style.display = '';
+    input.value = '';
+    input.focus();
+  } else {
+    input.style.display = 'none';
+    input.value = preset.value;
+  }
+  saveConfig();
+}
+
+// ── Init ──
+async function init() {
+  const [models, tests] = await Promise.all([
+    fetch('/api/models').then(r => r.json()),
+    fetch('/api/tests').then(r => r.json()),
+  ]);
+
+  // Populate model datalist
+  const dl = document.getElementById('modelList');
+  models.forEach(m => { const o = document.createElement('option'); o.value = m.id; o.label = m.display; dl.appendChild(o); });
+
+  TESTS = tests;
+  renderTestCards();
+
+  // Restore saved config
+  loadConfig();
+  updateModelInfo();
+  updateClaudeCodeOption();
+  updateStreamingTestVisibility();
+
+  // Event listeners — auto-save on any change
+  document.getElementById('useStreaming').addEventListener('change', updateStreamingTestVisibility);
+  const inputs = ['baseUrl', 'modelId', 'apiKey', 'provider', 'simulateClaudeCodeCLI', 'useStreaming'];
+  inputs.forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('input', saveConfig);
+    el.addEventListener('change', saveConfig);
+  });
+  // baseUrl input also syncs the preset dropdown
+  document.getElementById('baseUrl').addEventListener('input', syncBaseUrlPreset);
+  document.getElementById('modelId').addEventListener('input', () => { updateModelInfo(); updateClaudeCodeOption(); generateCustomJSON(); });
+  document.getElementById('modelId').addEventListener('change', () => { updateModelInfo(); updateClaudeCodeOption(); generateCustomJSON(); });
+  document.getElementById('provider').addEventListener('change', () => { updateClaudeCodeOption(); generateCustomJSON(); });
+
+  // Generate initial custom JSON
+  generateCustomJSON();
+}
+
+async function updateModelInfo() {
+  const modelId = document.getElementById('modelId').value.trim();
+  const bar = document.getElementById('modelBar');
+  if (!modelId) { bar.classList.add('hidden'); return; }
+
+  // Auto-detect provider
+  const prov = document.getElementById('provider');
+  if (!prov.value) {
+    const l = modelId.toLowerCase();
+    if (l.includes('claude')) prov.value = 'claude';
+    else if (l.includes('gemini')) prov.value = 'gemini';
+    else prov.value = 'openai';
+  }
+
+  const info = await fetch(`/api/model-info?id=${encodeURIComponent(modelId)}`).then(r => r.json());
+  if (!info) {
+    bar.className = 'model-bar unknown';
+    bar.innerHTML = '<span>该模型不在官方数据库中。身份验证和上下文长度测试的比对能力将受到限制。</span>';
+    bar.classList.remove('hidden');
+    return;
+  }
+  bar.className = 'model-bar';
+  bar.innerHTML = `
+    <span class="item"><b>${info.displayName}</b></span>
+    <span class="item">上下文: <b>${(info.contextWindow/1000).toFixed(0)}K</b></span>
+    <span class="item">知识截止: <b>${info.knowledgeCutoff}</b></span>
+    <span class="item">思维链: <b>${info.supportsThinking ? '支持' : '不支持'}</b></span>
+    <span class="item">缓存: <b>${info.supportsCaching ? '支持' : '不支持'}</b></span>`;
+  bar.classList.remove('hidden');
+}
+
+// ── Render test cards ──
+function renderTestCards() {
+  const grid = document.getElementById('testGrid');
+  grid.innerHTML = '';
+  TESTS.forEach(t => {
+    const card = document.createElement('div');
+    card.className = 'test-card';
+    card.id = `test-card-${t.id}`;
+    card.innerHTML = `
+      <div class="test-header" onclick="toggleTestBody('${t.id}')">
+        <div class="left">
+          <span class="badge badge-idle" id="badge-${t.id}">待测</span>
+          <span class="name">${t.name}</span>
+          <span class="duration" id="dur-${t.id}"></span>
+        </div>
+        <button class="btn btn-sm btn-primary" id="btn-${t.id}" onclick="event.stopPropagation();runTest('${t.id}')">运行</button>
+      </div>
+      <div class="test-body" id="body-${t.id}">
+        <div class="tabs" id="tabs-${t.id}">
+          <div class="tab active" onclick="switchTab('${t.id}','conclusion')">结论</div>
+          <div class="tab" onclick="switchTab('${t.id}','request')">请求</div>
+          <div class="tab" onclick="switchTab('${t.id}','response')">响应</div>
+          <div class="tab" onclick="switchTab('${t.id}','judgment')">判断依据</div>
+        </div>
+        <div class="tab-content active" id="tc-${t.id}-conclusion">
+          <div class="conclusion" id="conclusion-${t.id}">
+            <span style="color:var(--text2)">点击"运行"执行此测试</span>
+          </div>
+        </div>
+        <div class="tab-content" id="tc-${t.id}-request">
+          <div style="text-align:right;margin-bottom:4px;"><button class="btn btn-sm" onclick="copyRaw('raw-req-${t.id}')">复制</button></div>
+          <div class="raw-block" id="raw-req-${t.id}">暂无数据</div>
+        </div>
+        <div class="tab-content" id="tc-${t.id}-response">
+          <div style="text-align:right;margin-bottom:4px;"><button class="btn btn-sm" onclick="copyRaw('raw-resp-${t.id}')">复制</button></div>
+          <div class="raw-block" id="raw-resp-${t.id}">暂无数据</div>
+        </div>
+        <div class="tab-content" id="tc-${t.id}-judgment">
+          <div class="conclusion" id="judgment-${t.id}">
+            <span style="color:var(--text2)">暂无判断依据</span>
+          </div>
+        </div>
+      </div>`;
+    grid.appendChild(card);
+  });
+}
+
+function toggleTestBody(testId) {
+  document.getElementById(`body-${testId}`).classList.toggle('open');
+}
+
+function switchTab(testId, tabName) {
+  // Update tab buttons
+  document.querySelectorAll(`#tabs-${testId} .tab`).forEach(el => el.classList.remove('active'));
+  event.target.classList.add('active');
+  // Update content
+  ['conclusion','request','response','judgment'].forEach(n => {
+    document.getElementById(`tc-${testId}-${n}`).classList.remove('active');
+  });
+  document.getElementById(`tc-${testId}-${tabName}`).classList.add('active');
+}
+
+// ── Button lock management ──
+let isRunningAll = false;
+
+function setTestButtonsDisabled(disabled) {
+  TESTS.forEach(t => { document.getElementById(`btn-${t.id}`).disabled = disabled; });
+  document.getElementById('runAllBtn').disabled = disabled;
+}
+
+function markTestRunning(testId) {
+  const badge = document.getElementById(`badge-${testId}`);
+  badge.className = 'badge badge-running';
+  badge.innerHTML = '<span class="spinner"></span> 运行中';
+  document.getElementById(`dur-${testId}`).textContent = '';
+  document.getElementById(`conclusion-${testId}`).innerHTML = '<span class="spinner"></span> 测试中...';
+  // Reset tabs to conclusion
+  const tabs = document.querySelectorAll(`#tabs-${testId} .tab`);
+  tabs.forEach((t,i) => t.classList.toggle('active', i === 0));
+  ['conclusion','request','response','judgment'].forEach((n,i) => {
+    document.getElementById(`tc-${testId}-${n}`).classList.toggle('active', i === 0);
+  });
+}
+
+// ── Execute a single test, returns a Promise that resolves with the result ──
+function executeTest(testId, cfg) {
+  return new Promise((resolve) => {
+    markTestRunning(testId);
+    const params = new URLSearchParams({ ...cfg, testId });
+    const es = new EventSource(`/api/run-test?${params}`);
+
+    es.addEventListener('result', e => {
+      const r = JSON.parse(e.data);
+      testResults[testId] = r;
+      displayResult(testId, r);
+      es.close();
+      updateSummary();
+      resolve(r);
+    });
+
+    es.addEventListener('error', e => {
+      const badge = document.getElementById(`badge-${testId}`);
+      try {
+        const d = JSON.parse(e.data);
+        badge.className = 'badge badge-error';
+        badge.textContent = '错误';
+        document.getElementById(`conclusion-${testId}`).innerHTML = `<span style="color:var(--red)">${esc(d.message)}</span>`;
+      } catch {
+        badge.className = 'badge badge-error';
+        badge.textContent = '错误';
+      }
+      es.close();
+      resolve(null);
+    });
+
+    es.onerror = () => { es.close(); resolve(null); };
+  });
+}
+
+// ── Run a single test (user clicks individual Run button) ──
+async function runTest(testId) {
+  const cfg = getConfig();
+  if (!cfg) return;
+
+  const btn = document.getElementById(`btn-${testId}`);
+  btn.disabled = true;
+  document.getElementById('runAllBtn').disabled = true;
+  document.getElementById(`body-${testId}`).classList.add('open');
+
+  await executeTest(testId, cfg);
+
+  btn.disabled = false;
+  document.getElementById('runAllBtn').disabled = false;
+}
+
+// ── Run all tests sequentially, concurrency last ──
+async function runAllTests() {
+  const cfg = getConfig();
+  if (!cfg) return;
+
+  isRunningAll = true;
+  setTestButtonsDisabled(true);
+  document.getElementById('runAllBtn').textContent = '测试中...';
+
+  const isStreaming = document.getElementById('useStreaming').checked;
+  // Skip streaming test when streaming mode is on; concurrency runs last
+  const skipIds = new Set(['concurrency']);
+  if (isStreaming) skipIds.add('streaming');
+  const normalTests = TESTS.filter(t => !skipIds.has(t.id));
+  const concurrencyTest = TESTS.find(t => t.id === 'concurrency');
+
+  for (const t of normalTests) {
+    const r = await executeTest(t.id, cfg);
+    if (r && r.message && r.message.toLowerCase().includes('quota')) {
+      break;
+    }
+  }
+
+  // Run concurrency test last
+  if (concurrencyTest) {
+    await executeTest(concurrencyTest.id, cfg);
+  }
+
+  isRunningAll = false;
+  setTestButtonsDisabled(false);
+  document.getElementById('runAllBtn').textContent = '全部测试';
+}
+
+// ── Display result ──
+function displayResult(testId, r) {
+  const badge = document.getElementById(`badge-${testId}`);
+  badge.className = `badge badge-${r.status}`;
+  badge.textContent = { pass:'通过', fail:'失败', warn:'警告', skip:'跳过', error:'错误' }[r.status] || r.status;
+
+  document.getElementById(`dur-${testId}`).textContent = `${r.durationMs}ms`;
+
+  // Conclusion tab
+  const statusColor = { pass:'var(--green)', fail:'var(--red)', warn:'var(--yellow)', error:'var(--red)', skip:'var(--gray)' }[r.status];
+  document.getElementById(`conclusion-${testId}`).innerHTML = `
+    <div class="status-line" style="color:${statusColor}">${esc(r.message)}</div>
+    ${r.details ? `<pre style="margin-top:8px;font-size:12px;color:var(--text2);white-space:pre-wrap">${esc(JSON.stringify(r.details, null, 2))}</pre>` : ''}`;
+
+  // Request tab
+  document.getElementById(`raw-req-${testId}`).textContent = r.rawRequest
+    ? JSON.stringify(r.rawRequest, null, 2)
+    : '未捕获到请求数据';
+
+  // Response tab
+  document.getElementById(`raw-resp-${testId}`).textContent = r.rawResponse
+    ? JSON.stringify(r.rawResponse, null, 2)
+    : '未捕获到响应数据';
+
+  // Judgment tab
+  document.getElementById(`judgment-${testId}`).innerHTML = r.judgment
+    ? `<div class="judgment">${esc(r.judgment)}</div>`
+    : '<span style="color:var(--text2)">未提供判断依据</span>';
+}
+
+// ── Summary ──
+function updateSummary() {
+  const card = document.getElementById('summaryCard');
+  const results = Object.values(testResults);
+  if (results.length === 0) { card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+
+  const counts = { total: results.length, pass: 0, fail: 0, warn: 0, skip: 0, error: 0 };
+  results.forEach(r => { if (counts[r.status] !== undefined) counts[r.status]++; });
+
+  document.getElementById('summaryBar').innerHTML = `
+    <div class="stat"><div class="num">${counts.total}</div><div class="lbl">总计</div></div>
+    <div class="stat"><div class="num" style="color:var(--green)">${counts.pass}</div><div class="lbl">通过</div></div>
+    <div class="stat"><div class="num" style="color:var(--red)">${counts.fail}</div><div class="lbl">失败</div></div>
+    <div class="stat"><div class="num" style="color:var(--yellow)">${counts.warn}</div><div class="lbl">警告</div></div>
+    <div class="stat"><div class="num" style="color:var(--gray)">${counts.skip}</div><div class="lbl">跳过</div></div>
+    <div class="stat"><div class="num" style="color:var(--red)">${counts.error}</div><div class="lbl">错误</div></div>`;
+}
+
+// ── Custom request toggle ──
+function toggleCustomBody() {
+  const body = document.getElementById('customBody');
+  const hint = document.getElementById('customToggleHint');
+  body.classList.toggle('open');
+  const isOpen = body.classList.contains('open');
+  hint.textContent = isOpen ? '收起 ▲' : '展开 ▼';
+}
+
+// ── Streaming test visibility ──
+function updateStreamingTestVisibility() {
+  const isStreaming = document.getElementById('useStreaming').checked;
+  const card = document.getElementById('test-card-streaming');
+  if (card) card.style.display = isStreaming ? 'none' : '';
+}
+
+// ── Claude Code CLI option visibility ──
+function updateClaudeCodeOption() {
+  const modelId = document.getElementById('modelId').value.trim().toLowerCase();
+  let provider = document.getElementById('provider').value;
+  if (!provider) {
+    if (modelId.includes('claude')) provider = 'claude';
+    else if (modelId.includes('gemini')) provider = 'gemini';
+    else provider = 'openai';
+  }
+  const el = document.getElementById('claudeCodeCLIOption');
+  if (provider === 'claude') {
+    el.style.display = '';
+    el.classList.remove('hidden');
+  } else {
+    el.style.display = 'none';
+    el.classList.add('hidden');
+    document.getElementById('simulateClaudeCodeCLI').checked = false;
+  }
+}
+
+// ── Utils ──
+function getConfig() {
+  const baseUrl = document.getElementById('baseUrl').value.trim();
+  const modelId = document.getElementById('modelId').value.trim();
+  const apiKey = document.getElementById('apiKey').value.trim();
+  let provider = document.getElementById('provider').value;
+  if (!baseUrl || !modelId || !apiKey) { alert('请填写基础地址、模型 ID 和 API 密钥'); return null; }
+  if (!provider) {
+    const l = modelId.toLowerCase();
+    provider = l.includes('claude') ? 'claude' : l.includes('gemini') ? 'gemini' : 'openai';
+  }
+  const cfg = { baseUrl, modelId, apiKey, provider };
+  if (provider === 'claude' && document.getElementById('simulateClaudeCodeCLI').checked) {
+    cfg.simulateClaudeCodeCLI = 'true';
+  }
+  if (document.getElementById('useStreaming').checked) {
+    cfg.useStreaming = 'true';
+  }
+  return cfg;
+}
+
+function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── Custom Request ──
+function generateCustomJSON() {
+  const modelId = document.getElementById('modelId').value.trim() || 'model-id';
+  let provider = document.getElementById('provider').value;
+  if (!provider) {
+    const l = modelId.toLowerCase();
+    provider = l.includes('claude') ? 'claude' : l.includes('gemini') ? 'gemini' : 'openai';
+  }
+
+  let json;
+  if (provider === 'claude') {
+    json = {
+      model: modelId,
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: '你好，请做一下自我介绍' }],
+    };
+  } else if (provider === 'gemini') {
+    json = {
+      contents: [{ parts: [{ text: '你好，请做一下自我介绍' }] }],
+      generationConfig: { maxOutputTokens: 1024 },
+    };
+  } else {
+    json = {
+      model: modelId,
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: '你好，请做一下自我介绍' }],
+    };
+  }
+  document.getElementById('customJSON').value = JSON.stringify(json, null, 2);
+}
+
+function switchCustomTab(tab) {
+  const resp = document.getElementById('customRespContent');
+  const raw = document.getElementById('customRawContent');
+  const tabResp = document.getElementById('customTabResp');
+  const tabRaw = document.getElementById('customTabRaw');
+  if (tab === 'resp') {
+    resp.style.display = ''; raw.style.display = 'none';
+    tabResp.style.fontWeight = '500'; tabRaw.style.fontWeight = '';
+  } else {
+    resp.style.display = 'none'; raw.style.display = '';
+    tabResp.style.fontWeight = ''; tabRaw.style.fontWeight = '500';
+  }
+}
+
+function copyCustomResult() {
+  const resp = document.getElementById('customRespContent');
+  const raw = document.getElementById('customRawContent');
+  const visible = resp.style.display !== 'none' ? resp : raw;
+  navigator.clipboard.writeText(visible.textContent).then(() => {});
+}
+
+async function sendCustomRequest() {
+  const cfg = getConfig();
+  if (!cfg) return;
+
+  const btn = document.getElementById('customSendBtn');
+  const badge = document.getElementById('customBadge');
+  const dur = document.getElementById('customDur');
+  btn.disabled = true;
+  badge.style.display = '';
+  badge.className = 'badge badge-running';
+  badge.innerHTML = '<span class="spinner"></span> 请求中';
+  dur.textContent = '';
+
+  // Auto-expand and scroll into view like test items
+  const body = document.getElementById('customBody');
+  const hint = document.getElementById('customToggleHint');
+  body.classList.add('open');
+  hint.textContent = '收起 ▲';
+  body.closest('.card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  const jsonStr = document.getElementById('customJSON').value.trim();
+  const params = new URLSearchParams({ ...cfg, testId: 'custom', customPrompt: jsonStr });
+  const es = new EventSource(`/api/run-test?${params}`);
+
+  es.addEventListener('result', e => {
+    const r = JSON.parse(e.data);
+    dur.textContent = `${r.durationMs}ms`;
+    badge.className = `badge badge-${r.status}`;
+    badge.textContent = { pass:'成功', fail:'失败', warn:'警告', skip:'跳过', error:'错误' }[r.status] || r.status;
+
+    const resultDiv = document.getElementById('customResult');
+    resultDiv.style.display = '';
+
+    const respContent = document.getElementById('customRespContent');
+    respContent.textContent = r.details?.response || r.message || '无内容';
+
+    const rawContent = document.getElementById('customRawContent');
+    rawContent.textContent = r.rawResponse ? JSON.stringify(r.rawResponse, null, 2) : '无原始数据';
+
+    switchCustomTab('resp');
+    es.close();
+    btn.disabled = false;
+  });
+
+  es.addEventListener('error', e => {
+    try {
+      const d = JSON.parse(e.data);
+      badge.className = 'badge badge-error';
+      badge.textContent = '错误';
+      document.getElementById('customResult').style.display = '';
+      document.getElementById('customRespContent').textContent = d.message;
+    } catch {}
+    es.close();
+    btn.disabled = false;
+  });
+
+  es.onerror = () => { es.close(); btn.disabled = false; };
+}
+
+function copyRaw(id) {
+  const el = document.getElementById(id);
+  const text = el.textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = el.parentElement.querySelector('.btn');
+    if (btn) { const orig = btn.textContent; btn.textContent = '已复制'; setTimeout(() => btn.textContent = orig, 1500); }
+  });
+}
+
+init();
+</script>
+</body>
+</html>
