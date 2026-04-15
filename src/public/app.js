@@ -1,6 +1,7 @@
 // ── State ──
 let TESTS = [];
 let testResults = {};
+let currentPricing = null;  // cached model pricing from /api/model-info
 
 // ── LocalStorage persistence ──
 const STORAGE_KEY = 'apitest_config';
@@ -81,6 +82,7 @@ async function init() {
 
   TESTS = tests;
   renderTestCards();
+  renderCompareChecks();
 
   // Restore saved config
   loadConfig();
@@ -122,18 +124,28 @@ async function updateModelInfo() {
 
   const info = await fetch(`/api/model-info?id=${encodeURIComponent(modelId)}`).then(r => r.json());
   if (!info) {
+    currentPricing = null;
     bar.className = 'model-bar unknown';
     bar.innerHTML = '<span>该模型不在官方数据库中。身份验证和上下文长度测试的比对能力将受到限制。</span>';
     bar.classList.remove('hidden');
     return;
   }
+  currentPricing = info.pricing || null;
+  const p = info.pricing || {};
+  const fmt = (v) => v == null ? '无' : `$${v}`;
   bar.className = 'model-bar';
   bar.innerHTML = `
     <span class="item"><b>${info.displayName}</b></span>
     <span class="item">上下文: <b>${(info.contextWindow/1000).toFixed(0)}K</b></span>
     <span class="item">知识截止: <b>${info.knowledgeCutoff}</b></span>
-    <span class="item">思维链: <b>${info.supportsThinking ? '支持' : '不支持'}</b></span>
-    <span class="item">缓存: <b>${info.supportsCaching ? '支持' : '不支持'}</b></span>`;
+    <span class="item">思维链: <b>${info.supportsThinking ? '✓' : '✗'}</b></span>
+    <span class="item">缓存: <b>${info.supportsCaching ? '✓' : '✗'}</b></span>
+    <span class="sep">|</span>
+    <span class="item">输入: <b>${fmt(p.input)}</b></span>
+    <span class="item">补全: <b>${fmt(p.output)}</b></span>
+    <span class="item">缓存写: <b>${fmt(p.cacheWrite)}</b></span>
+    <span class="item">缓存读: <b>${fmt(p.cacheRead)}</b></span>
+    <span class="item unit">$/1M</span>`;
   bar.classList.remove('hidden');
 }
 
@@ -311,7 +323,11 @@ function displayResult(testId, r) {
   badge.className = `badge badge-${r.status}`;
   badge.textContent = { pass:'通过', fail:'失败', warn:'警告', skip:'跳过', error:'错误' }[r.status] || r.status;
 
-  document.getElementById(`dur-${testId}`).textContent = `${r.durationMs}ms`;
+  const cost = calcCost(r);
+  const durEl = document.getElementById(`dur-${testId}`);
+  durEl.innerHTML = cost
+    ? `${r.durationMs}ms <span class="cost-tag" title="${formatCostLine(cost)}">$${cost.total < 0.0001 ? cost.total.toExponential(2) : cost.total.toFixed(6).replace(/0+$/, '').replace(/\.$/, '')}</span>`
+    : `${r.durationMs}ms`;
 
   // Conclusion tab
   const statusColor = { pass:'var(--green)', fail:'var(--red)', warn:'var(--yellow)', error:'var(--red)', skip:'var(--gray)' }[r.status];
@@ -345,13 +361,27 @@ function updateSummary() {
   const counts = { total: results.length, pass: 0, fail: 0, warn: 0, skip: 0, error: 0 };
   results.forEach(r => { if (counts[r.status] !== undefined) counts[r.status]++; });
 
+  let totalCost = 0;
+  results.forEach(r => { const c = calcCost(r); if (c) totalCost += c.total; });
+  const costStr = totalCost > 0 ? `$${totalCost < 0.001 ? totalCost.toExponential(2) : totalCost.toFixed(4)}` : '-';
+
+  const s = calcScore(results);
+  const gradeColor = { A: 'var(--green)', B: '#2da44e', C: 'var(--yellow)', D: '#cf6600', F: 'var(--red)' }[s.grade] || 'var(--text)';
+  const bd = s.breakdown;
+  const scoreTooltip = `通过率:${bd.passRate}/30  延迟:${bd.latency}/20  稳定性:${bd.stability}/20  并发:${bd.concurrency}/15  身份:${bd.identity}/15`;
+
   document.getElementById('summaryBar').innerHTML = `
+    <div class="stat score-stat" title="${scoreTooltip}">
+      <div class="num" style="color:${gradeColor}">${s.score}</div>
+      <div class="lbl">评分 <span class="grade-badge" style="background:${gradeColor}">${s.grade}</span></div>
+    </div>
     <div class="stat"><div class="num">${counts.total}</div><div class="lbl">总计</div></div>
     <div class="stat"><div class="num" style="color:var(--green)">${counts.pass}</div><div class="lbl">通过</div></div>
     <div class="stat"><div class="num" style="color:var(--red)">${counts.fail}</div><div class="lbl">失败</div></div>
     <div class="stat"><div class="num" style="color:var(--yellow)">${counts.warn}</div><div class="lbl">警告</div></div>
     <div class="stat"><div class="num" style="color:var(--gray)">${counts.skip}</div><div class="lbl">跳过</div></div>
-    <div class="stat"><div class="num" style="color:var(--red)">${counts.error}</div><div class="lbl">错误</div></div>`;
+    <div class="stat"><div class="num" style="color:var(--red)">${counts.error}</div><div class="lbl">错误</div></div>
+    <div class="stat"><div class="num" style="color:var(--accent)">${costStr}</div><div class="lbl">估算费用</div></div>`;
 }
 
 // ── Custom request toggle ──
@@ -412,6 +442,97 @@ function getConfig() {
 }
 
 function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── Cost estimation ──
+function extractTokens(r) {
+  const d = r.details || {};
+  const usage = r.rawResponse?.body?.usage;
+  const input = d.promptTokens ?? d.inputTokens ?? usage?.prompt_tokens ?? usage?.input_tokens ?? null;
+  const output = d.completionTokens ?? d.outputTokens ?? usage?.completion_tokens ?? usage?.output_tokens ?? null;
+  return { input, output };
+}
+
+function calcCost(r) {
+  if (!currentPricing) return null;
+  const t = extractTokens(r);
+  if (t.input == null && t.output == null) return null;
+  const inTok = t.input || 0;
+  const outTok = t.output || 0;
+  const inCost = inTok * currentPricing.input / 1e6;
+  const outCost = outTok * currentPricing.output / 1e6;
+  const total = inCost + outCost;
+  return { inTok, outTok, inPrice: currentPricing.input, outPrice: currentPricing.output, inCost, outCost, total };
+}
+
+function formatCostLine(c) {
+  if (!c) return '';
+  const fmt = (v) => v < 0.0001 ? v.toExponential(2) : v.toFixed(6).replace(/0+$/, '').replace(/\.$/, '');
+  return `${c.inTok}x$${c.inPrice}/1M + ${c.outTok}x$${c.outPrice}/1M = $${fmt(c.total)}`;
+}
+
+// ── Scoring ──
+function calcScore(results) {
+  const byId = {};
+  results.forEach(r => { byId[r.testId] = r; });
+  const total = results.length;
+  if (total === 0) return { score: 0, grade: 'F', breakdown: {} };
+
+  // 1. Pass rate (30 pts)
+  let passScore = 0;
+  results.forEach(r => {
+    if (r.status === 'pass') passScore += 30 / total;
+    else if (r.status === 'warn') passScore += 15 / total;
+  });
+
+  // 2. Latency (20 pts) — from latency test TTFB
+  let latencyScore = 0;
+  const lat = byId['latency'];
+  if (lat && lat.status !== 'skip' && lat.status !== 'error') {
+    const ttfb = lat.details?.ttfbMs ?? lat.durationMs;
+    if (ttfb < 1000) latencyScore = 20;
+    else if (ttfb < 3000) latencyScore = 15;
+    else if (ttfb < 10000) latencyScore = 8;
+  }
+
+  // 3. Stability (20 pts) — from stability test success rate
+  let stabilityScore = 0;
+  const stab = byId['stability'];
+  if (stab && stab.details?.successRate != null) {
+    stabilityScore = (stab.details.successRate / 100) * 20;
+  } else if (stab && stab.status === 'pass') {
+    stabilityScore = 20;
+  }
+
+  // 4. Concurrency (15 pts) — maxConcurrency / 30, capped
+  let concurrencyScore = 0;
+  const conc = byId['concurrency'];
+  if (conc && conc.details?.maxConcurrency != null) {
+    concurrencyScore = Math.min(conc.details.maxConcurrency / 30, 1) * 15;
+  } else if (conc && conc.status === 'pass') {
+    concurrencyScore = 15;
+  }
+
+  // 5. Identity (15 pts)
+  let identityScore = 0;
+  const ident = byId['identity'];
+  if (ident) {
+    if (ident.status === 'pass') identityScore = 15;
+    else if (ident.status === 'warn') identityScore = 8;
+  }
+
+  const score = Math.round(passScore + latencyScore + stabilityScore + concurrencyScore + identityScore);
+  const grade = score >= 90 ? 'A' : score >= 75 ? 'B' : score >= 60 ? 'C' : score >= 40 ? 'D' : 'F';
+  return {
+    score, grade,
+    breakdown: {
+      passRate: Math.round(passScore),
+      latency: Math.round(latencyScore),
+      stability: Math.round(stabilityScore),
+      concurrency: Math.round(concurrencyScore),
+      identity: Math.round(identityScore),
+    },
+  };
+}
 
 // ── Custom Request ──
 function generateCustomJSON() {
@@ -533,4 +654,335 @@ function copyRaw(id) {
   });
 }
 
+// ── IndexedDB persistence ──
+const DB_NAME = 'apitest_history';
+const DB_VERSION = 1;
+const STORE_NAME = 'results';
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function saveToHistory() {
+  const results = Object.values(testResults);
+  if (results.length === 0) return;
+  const s = calcScore(results);
+  const counts = { total: results.length, pass: 0, fail: 0, warn: 0, skip: 0, error: 0 };
+  results.forEach(r => { if (counts[r.status] !== undefined) counts[r.status]++; });
+  let totalCost = 0;
+  results.forEach(r => { const c = calcCost(r); if (c) totalCost += c.total; });
+
+  const record = {
+    timestamp: new Date().toISOString(),
+    baseUrl: document.getElementById('baseUrl').value.trim(),
+    modelId: document.getElementById('modelId').value.trim(),
+    provider: document.getElementById('provider').value,
+    results: results,
+    summary: counts,
+    score: s.score,
+    grade: s.grade,
+    totalCost,
+  };
+  const db = await openDB();
+  const tx = db.transaction(STORE_NAME, 'readwrite');
+  tx.objectStore(STORE_NAME).add(record);
+  await new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = reject; });
+  loadHistory();
+}
+
+async function loadHistory() {
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.getAll();
+    req.onsuccess = () => {
+      const records = req.result.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      const list = document.getElementById('historyList');
+      renderTrendChart(records);
+      if (records.length === 0) { list.innerHTML = '暂无历史记录'; return; }
+      list.innerHTML = records.map(r => {
+        const time = new Date(r.timestamp).toLocaleString('zh-CN');
+        const gradeColor = { A:'var(--green)', B:'#2da44e', C:'var(--yellow)', D:'#cf6600', F:'var(--red)' }[r.grade] || 'var(--text)';
+        const url = new URL(r.baseUrl).hostname;
+        return `<div class="history-item">
+          <span class="history-score" style="color:${gradeColor}">${r.score}<small>${r.grade}</small></span>
+          <span class="history-info"><b>${r.modelId}</b> @ ${url}</span>
+          <span class="history-stats">${r.summary.pass}/${r.summary.total} 通过</span>
+          <span class="history-time">${time}</span>
+          <button class="btn btn-sm" onclick="deleteHistoryItem(${r.id})">删除</button>
+        </div>`;
+      }).join('');
+    };
+  } catch {}
+}
+
+async function deleteHistoryItem(id) {
+  const db = await openDB();
+  const tx = db.transaction(STORE_NAME, 'readwrite');
+  tx.objectStore(STORE_NAME).delete(id);
+  tx.oncomplete = () => loadHistory();
+}
+
+async function clearHistory() {
+  if (!confirm('确定要清空所有历史记录吗？')) return;
+  const db = await openDB();
+  const tx = db.transaction(STORE_NAME, 'readwrite');
+  tx.objectStore(STORE_NAME).clear();
+  tx.oncomplete = () => loadHistory();
+}
+
+// ── Trend chart ──
+let trendChart = null;
+
+function renderTrendChart(records) {
+  const chartEl = document.getElementById('historyChart');
+  if (!records || records.length < 2) { chartEl.style.display = 'none'; return; }
+  chartEl.style.display = '';
+
+  // Group by baseUrl+modelId, take last 20
+  const sorted = [...records].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).slice(-20);
+  const groups = {};
+  sorted.forEach(r => {
+    const key = `${r.modelId}@${new URL(r.baseUrl).hostname}`;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(r);
+  });
+
+  const colors = ['#0969da', '#1a7f37', '#cf222e', '#9a6700', '#6639ba'];
+  const datasets = Object.entries(groups).map(([key, recs], i) => ({
+    label: key,
+    data: recs.map(r => ({ x: r.timestamp, y: r.score })),
+    borderColor: colors[i % colors.length],
+    backgroundColor: colors[i % colors.length] + '20',
+    tension: 0.3,
+    pointRadius: 4,
+  }));
+
+  const ctx = document.getElementById('trendCanvas');
+  if (trendChart) trendChart.destroy();
+  trendChart = new Chart(ctx, {
+    type: 'line',
+    data: { datasets },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'top', labels: { font: { size: 11 } } } },
+      scales: {
+        x: { type: 'category', labels: sorted.map(r => new Date(r.timestamp).toLocaleString('zh-CN', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })), ticks: { font: { size: 10 } } },
+        y: { min: 0, max: 100, title: { display: true, text: '评分' }, ticks: { font: { size: 10 } } },
+      },
+    },
+  });
+}
+
+// ── Export ──
+function exportJSON() {
+  const results = Object.values(testResults);
+  if (results.length === 0) { alert('无测试结果可导出'); return; }
+  const s = calcScore(results);
+  const data = {
+    exportTime: new Date().toISOString(),
+    baseUrl: document.getElementById('baseUrl').value.trim(),
+    modelId: document.getElementById('modelId').value.trim(),
+    provider: document.getElementById('provider').value,
+    score: s.score,
+    grade: s.grade,
+    scoreBreakdown: s.breakdown,
+    results,
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `apitest-${data.modelId}-${Date.now()}.json`;
+  a.click();
+}
+
+function exportHTMLReport() {
+  const results = Object.values(testResults);
+  if (results.length === 0) { alert('无测试结果可导出'); return; }
+  const s = calcScore(results);
+  const modelId = document.getElementById('modelId').value.trim();
+  const baseUrl = document.getElementById('baseUrl').value.trim();
+  const provider = document.getElementById('provider').value;
+  const bd = s.breakdown;
+  const gradeColor = { A:'#1a7f37', B:'#2da44e', C:'#9a6700', D:'#cf6600', F:'#cf222e' }[s.grade];
+
+  let totalCost = 0;
+  results.forEach(r => { const c = calcCost(r); if (c) totalCost += c.total; });
+
+  const statusMap = { pass:'通过', fail:'失败', warn:'警告', skip:'跳过', error:'错误' };
+  const statusColors = { pass:'#1a7f37', fail:'#cf222e', warn:'#9a6700', skip:'#6e7781', error:'#cf222e' };
+
+  const rows = results.map(r => {
+    const c = calcCost(r);
+    const costStr = c ? `$${c.total.toFixed(6)}` : '-';
+    return `<tr>
+      <td>${esc(r.testName)}</td>
+      <td style="color:${statusColors[r.status]};font-weight:600">${statusMap[r.status] || r.status}</td>
+      <td>${r.durationMs}ms</td>
+      <td>${costStr}</td>
+      <td style="font-size:12px">${esc(r.message)}</td>
+    </tr>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
+<title>测试报告 - ${esc(modelId)}</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:900px;margin:40px auto;padding:0 20px;color:#1f2328}
+h1{font-size:20px;margin-bottom:4px}
+.meta{color:#656d76;font-size:13px;margin-bottom:24px}
+.score-box{display:inline-flex;align-items:center;gap:12px;padding:16px 24px;background:#f5f6f8;border-radius:12px;margin-bottom:24px}
+.score-num{font-size:48px;font-weight:700;color:${gradeColor}}
+.score-grade{font-size:24px;font-weight:700;color:#fff;background:${gradeColor};padding:4px 12px;border-radius:8px}
+.breakdown{display:flex;gap:16px;font-size:12px;color:#656d76;margin-top:8px}
+.breakdown span b{color:#1f2328}
+table{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px}
+th,td{padding:8px 12px;border:1px solid #e1e4e8;text-align:left}
+th{background:#f5f6f8;font-weight:600}
+.footer{margin-top:24px;padding-top:16px;border-top:1px solid #e1e4e8;font-size:11px;color:#656d76}
+</style></head><body>
+<h1>API 通道测试报告</h1>
+<div class="meta">模型: ${esc(modelId)} | 通道: ${esc(baseUrl)} | 服务商: ${esc(provider)} | 时间: ${new Date().toLocaleString('zh-CN')}</div>
+<div class="score-box">
+  <span class="score-num">${s.score}</span>
+  <span class="score-grade">${s.grade}</span>
+  <div>
+    <div class="breakdown">
+      <span>通过率: <b>${bd.passRate}/30</b></span>
+      <span>延迟: <b>${bd.latency}/20</b></span>
+      <span>稳定性: <b>${bd.stability}/20</b></span>
+      <span>并发: <b>${bd.concurrency}/15</b></span>
+      <span>身份: <b>${bd.identity}/15</b></span>
+    </div>
+    <div style="font-size:12px;color:#656d76;margin-top:4px">总估算费用: $${totalCost.toFixed(6)}</div>
+  </div>
+</div>
+<table><thead><tr><th>测试项</th><th>状态</th><th>耗时</th><th>费用</th><th>说明</th></tr></thead><tbody>${rows}</tbody></table>
+<div class="footer">由模型中转测试工具生成 | ${new Date().toISOString()}</div>
+</body></html>`;
+
+  const blob = new Blob([html], { type: 'text/html' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `report-${modelId}-${Date.now()}.html`;
+  a.click();
+}
+
+// ── Multi-relay compare ──
+function toggleCompareBody() {
+  const body = document.getElementById('compareBody');
+  const hint = document.getElementById('compareToggleHint');
+  body.classList.toggle('open');
+  hint.textContent = body.classList.contains('open') ? '收起 ▲' : '展开 ▼';
+}
+
+function renderCompareChecks() {
+  const container = document.getElementById('compareTestChecks');
+  const defaultOn = ['promptInjection', 'identity', 'fingerprint', 'latency', 'stability'];
+  container.innerHTML = TESTS.map(t =>
+    `<label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;">
+      <input type="checkbox" class="compare-check" value="${t.id}" ${defaultOn.includes(t.id) ? 'checked' : ''} style="width:auto;accent-color:var(--accent);">
+      ${t.name}
+    </label>`
+  ).join('');
+}
+
+function toggleCompareChecks(checked) {
+  document.querySelectorAll('.compare-check').forEach(el => el.checked = checked);
+}
+
+async function runCompare() {
+  const modelId = document.getElementById('modelId').value.trim();
+  const apiKey = document.getElementById('apiKey').value.trim();
+  let provider = document.getElementById('provider').value;
+  if (!modelId || !apiKey) { alert('请先填写模型 ID 和 API 密钥'); return; }
+  if (!provider) {
+    const l = modelId.toLowerCase();
+    provider = l.includes('claude') ? 'claude' : l.includes('gemini') ? 'gemini' : 'openai';
+  }
+
+  const urls = document.getElementById('compareUrls').value.trim().split('\n').map(u => u.trim()).filter(u => u).slice(0, 5);
+  if (urls.length < 2) { alert('请至少输入 2 个中转地址'); return; }
+
+  const btn = document.getElementById('compareBtn');
+  btn.disabled = true;
+  btn.textContent = '对比中...';
+  const resultDiv = document.getElementById('compareResult');
+  resultDiv.style.display = '';
+  resultDiv.innerHTML = '<span class="spinner"></span> 正在对比测试中，请稍候...';
+
+  // Run selected tests on each URL
+  const testIds = [...document.querySelectorAll('.compare-check:checked')].map(el => el.value);
+  if (testIds.length === 0) { alert('请至少选择一项测试'); btn.disabled = false; btn.textContent = '开始对比'; return; }
+  const allResults = {};
+
+  for (const url of urls) {
+    allResults[url] = {};
+    const baseUrl = url.replace(/\/+$/, '');
+    const cfg = { baseUrl, modelId, apiKey, provider };
+    if (document.getElementById('useStreaming').checked) cfg.useStreaming = 'true';
+
+    for (const testId of testIds) {
+      try {
+        const result = await new Promise((resolve) => {
+          const params = new URLSearchParams({ ...cfg, testId });
+          const es = new EventSource(`/api/run-test?${params}`);
+          es.addEventListener('result', e => { resolve(JSON.parse(e.data)); es.close(); });
+          es.addEventListener('error', () => { resolve(null); es.close(); });
+          es.onerror = () => { resolve(null); es.close(); };
+        });
+        allResults[url][testId] = result;
+      } catch { allResults[url][testId] = null; }
+    }
+  }
+
+  // Render comparison table
+  const statusMap = { pass:'通过', fail:'失败', warn:'警告', skip:'跳过', error:'错误' };
+  const statusColors = { pass:'var(--green)', fail:'var(--red)', warn:'var(--yellow)', skip:'var(--gray)', error:'var(--red)' };
+  const testNameMap = {};
+  TESTS.forEach(t => { testNameMap[t.id] = t.name; });
+
+  const headerCells = urls.map(u => `<th>${new URL(u).hostname}</th>`).join('');
+  const rows = testIds.map(tid => {
+    const cells = urls.map(u => {
+      const r = allResults[u][tid];
+      if (!r) return '<td style="color:var(--gray)">-</td>';
+      const extra = tid === 'latency' && r.details?.ttfbMs ? ` (${r.details.ttfbMs}ms)` : '';
+      return `<td style="color:${statusColors[r.status]}">${statusMap[r.status]}${extra}</td>`;
+    }).join('');
+    return `<tr><td><b>${testNameMap[tid] || tid}</b></td>${cells}</tr>`;
+  }).join('');
+
+  // Score row
+  const scoreRow = urls.map(u => {
+    const results = Object.values(allResults[u]).filter(Boolean);
+    const s = calcScore(results);
+    const gradeColor = { A:'var(--green)', B:'#2da44e', C:'var(--yellow)', D:'#cf6600', F:'var(--red)' }[s.grade];
+    return `<td style="font-weight:700;color:${gradeColor}">${s.score} (${s.grade})</td>`;
+  }).join('');
+
+  resultDiv.innerHTML = `<table class="compare-table"><thead><tr><th>测试项</th>${headerCells}</tr></thead><tbody>${rows}<tr><td><b>评分</b></td>${scoreRow}</tr></tbody></table>`;
+
+  btn.disabled = false;
+  btn.textContent = '开始对比';
+}
+
+// ── Auto-save after all tests ──
+const _origRunAllTests = runAllTests;
+runAllTests = async function() {
+  await _origRunAllTests();
+  await saveToHistory();
+};
+
 init();
+loadHistory();

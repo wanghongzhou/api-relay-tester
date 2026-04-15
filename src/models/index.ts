@@ -19,24 +19,26 @@ export const MODELS_DB: Record<string, ModelInfo> = {
     provider: 'anthropic',
     displayName: 'Claude Opus 4.6',
     contextWindow: 1000000,
-    previousContextWindow: 200000,   // Opus 4.5 was 200K
+    previousContextWindow: 200000,
     knowledgeCutoff: '2025-05',
     supportsThinking: true,
     supportsCaching: true,
     supportsStreaming: true,
     version: '4.6',
+    pricing: { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.50 },
   },
   'claude-sonnet-4-6': {
     modelId: 'claude-sonnet-4-6',
     provider: 'anthropic',
     displayName: 'Claude Sonnet 4.6',
     contextWindow: 1000000,
-    previousContextWindow: 200000,   // Sonnet 4.5 was 200K
+    previousContextWindow: 200000,
     knowledgeCutoff: '2025-08',
     supportsThinking: true,
     supportsCaching: true,
     supportsStreaming: true,
     version: '4.6',
+    pricing: { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.30 },
   },
   'claude-haiku-4-5': {
     modelId: 'claude-haiku-4-5-20251001',
@@ -49,70 +51,37 @@ export const MODELS_DB: Record<string, ModelInfo> = {
     supportsCaching: true,
     supportsStreaming: true,
     version: '4.5',
+    pricing: { input: 1, output: 5, cacheWrite: 1.25, cacheRead: 0.10 },
   },
   // ══════════════════════════════════════════════════════════════
-  //  OpenAI — 5.4 + 5.3-codex + 5.2
+  //  OpenAI — 5.4 + 5.3-codex  (5.2 及以下已于 2026-04-14 下架)
   // ══════════════════════════════════════════════════════════════
 
-  'gpt-5.2': {
-    modelId: 'gpt-5.2',
-    provider: 'openai',
-    displayName: 'GPT-5.2',
-    contextWindow: 400000,              // 400K max, 128K chat variant
-    previousContextWindow: 128000,
-    knowledgeCutoff: '2025-08',
-    supportsThinking: true,             // reasoning: none/low/medium/high/xhigh
-    supportsCaching: true,
-    supportsStreaming: true,
-    version: '5.2',
-  },
-  'gpt-5.2-codex': {
-    modelId: 'gpt-5.2-codex',
-    provider: 'openai',
-    displayName: 'GPT-5.2 Codex',
-    contextWindow: 400000,              // 400K + context compaction
-    previousContextWindow: 128000,
-    knowledgeCutoff: '2025-08',
-    supportsThinking: true,             // reasoning: low/medium/high/xhigh
-    supportsCaching: true,
-    supportsStreaming: true,
-    version: '5.2',
-  },
-  'gpt-5.2-pro': {
-    modelId: 'gpt-5.2-pro',
-    provider: 'openai',
-    displayName: 'GPT-5.2 Pro',
-    contextWindow: 400000,
-    previousContextWindow: 128000,
-    knowledgeCutoff: '2025-08',
-    supportsThinking: true,             // reasoning: xhigh
-    supportsCaching: true,
-    supportsStreaming: true,
-    version: '5.2',
-  },
   'gpt-5.3-codex': {
     modelId: 'gpt-5.3-codex',
     provider: 'openai',
     displayName: 'GPT-5.3 Codex',
-    contextWindow: 400000,              // 400K max
+    contextWindow: 400000,
     previousContextWindow: 128000,
     knowledgeCutoff: '2025-08',
-    supportsThinking: true,             // reasoning: low/medium/high/xhigh
+    supportsThinking: true,
     supportsCaching: true,
     supportsStreaming: true,
     version: '5.3',
+    pricing: { input: 1.75, output: 14, cacheWrite: null, cacheRead: 0.175 },
   },
   'gpt-5.4': {
     modelId: 'gpt-5.4',
     provider: 'openai',
     displayName: 'GPT-5.4',
-    contextWindow: 1050000,             // 1.05M max, 272K standard
+    contextWindow: 1050000,
     previousContextWindow: 128000,
     knowledgeCutoff: '2025-08',
     supportsThinking: true,
-    supportsCaching: false,
+    supportsCaching: true,
     supportsStreaming: true,
     version: '5.4',
+    pricing: { input: 2.50, output: 15, cacheWrite: null, cacheRead: 0.25 },
   },
   'gpt-5.4-mini': {
     modelId: 'gpt-5.4-mini',
@@ -121,10 +90,11 @@ export const MODELS_DB: Record<string, ModelInfo> = {
     contextWindow: 400000,
     previousContextWindow: 128000,
     knowledgeCutoff: '2025-08',
-    supportsThinking: true,             // reasoning: none/low/medium/high/xhigh
-    supportsCaching: false,
+    supportsThinking: true,
+    supportsCaching: true,
     supportsStreaming: true,
     version: '5.4',
+    pricing: { input: 0.75, output: 4.50, cacheWrite: null, cacheRead: 0.075 },
   },
   'gpt-5.4-nano': {
     modelId: 'gpt-5.4-nano',
@@ -133,22 +103,24 @@ export const MODELS_DB: Record<string, ModelInfo> = {
     contextWindow: 400000,
     previousContextWindow: 128000,
     knowledgeCutoff: '2025-08',
-    supportsThinking: true,             // reasoning: none/low/medium/high/xhigh
-    supportsCaching: false,
+    supportsThinking: true,
+    supportsCaching: true,
     supportsStreaming: true,
     version: '5.4',
+    pricing: { input: 0.20, output: 1.25, cacheWrite: null, cacheRead: 0.02 },
   },
   'gpt-5.4-pro': {
     modelId: 'gpt-5.4-pro',
     provider: 'openai',
     displayName: 'GPT-5.4 Pro',
-    contextWindow: 1050000,             // 1.05M max (922K input + 128K output)
+    contextWindow: 1050000,
     previousContextWindow: 128000,
     knowledgeCutoff: '2025-08',
-    supportsThinking: true,             // reasoning: none/low/medium/high/xhigh
-    supportsCaching: false,
+    supportsThinking: true,
+    supportsCaching: true,
     supportsStreaming: true,
     version: '5.4',
+    pricing: { input: 30, output: 180, cacheWrite: null, cacheRead: 3 },
   },
 
   // ══════════════════════════════════════════════════════════════
@@ -166,6 +138,7 @@ export const MODELS_DB: Record<string, ModelInfo> = {
     supportsCaching: true,
     supportsStreaming: true,
     version: '3.1',
+    pricing: { input: 2, output: 12, cacheWrite: null, cacheRead: 0.20 },
   },
   'gemini-3.1-flash': {
     modelId: 'gemini-3.1-flash',
@@ -178,6 +151,7 @@ export const MODELS_DB: Record<string, ModelInfo> = {
     supportsCaching: true,
     supportsStreaming: true,
     version: '3.1',
+    pricing: { input: 0.50, output: 3, cacheWrite: null, cacheRead: 0.05 },
   },
   'gemini-3.1-pro-preview': {
     modelId: 'gemini-3.1-pro-preview',
@@ -190,6 +164,7 @@ export const MODELS_DB: Record<string, ModelInfo> = {
     supportsCaching: true,
     supportsStreaming: true,
     version: '3.1',
+    pricing: { input: 2, output: 12, cacheWrite: null, cacheRead: 0.20 },
   },
   'gemini-3.1-flash-lite-preview': {
     modelId: 'gemini-3.1-flash-lite-preview',
@@ -198,10 +173,11 @@ export const MODELS_DB: Record<string, ModelInfo> = {
     contextWindow: 1048576,
     previousContextWindow: 1048576,
     knowledgeCutoff: '2025-01',
-    supportsThinking: true,             // thinking: minimal/low/medium/high
+    supportsThinking: true,
     supportsCaching: true,
     supportsStreaming: true,
     version: '3.1',
+    pricing: { input: 0.25, output: 1.50, cacheWrite: null, cacheRead: 0.025 },
   },
   'gemini-3.1-flash-image-preview': {
     modelId: 'gemini-3.1-flash-image-preview',
@@ -210,10 +186,11 @@ export const MODELS_DB: Record<string, ModelInfo> = {
     contextWindow: 1048576,
     previousContextWindow: 1048576,
     knowledgeCutoff: '2025-01',
-    supportsThinking: false,            // image generation model
+    supportsThinking: false,
     supportsCaching: true,
     supportsStreaming: true,
     version: '3.1',
+    pricing: { input: 0.50, output: 3, cacheWrite: null, cacheRead: 0.05 },
   },
   'gemini-3-pro-preview': {
     modelId: 'gemini-3-pro-preview',
@@ -226,6 +203,7 @@ export const MODELS_DB: Record<string, ModelInfo> = {
     supportsCaching: true,
     supportsStreaming: true,
     version: '3.0',
+    pricing: { input: 2, output: 12, cacheWrite: null, cacheRead: 0.20 },
   },
   'gemini-3-flash-preview': {
     modelId: 'gemini-3-flash-preview',
@@ -234,10 +212,11 @@ export const MODELS_DB: Record<string, ModelInfo> = {
     contextWindow: 1048576,
     previousContextWindow: 1048576,
     knowledgeCutoff: '2025-01',
-    supportsThinking: true,             // thinking: minimal/low/medium/high
+    supportsThinking: true,
     supportsCaching: true,
     supportsStreaming: true,
     version: '3.0',
+    pricing: { input: 0.50, output: 3, cacheWrite: null, cacheRead: 0.05 },
   },
   'gemini-2.5-pro': {
     modelId: 'gemini-2.5-pro',
@@ -250,6 +229,7 @@ export const MODELS_DB: Record<string, ModelInfo> = {
     supportsCaching: true,
     supportsStreaming: true,
     version: '2.5',
+    pricing: { input: 1.25, output: 10, cacheWrite: null, cacheRead: 0.125 },
   },
   'gemini-2.5-flash': {
     modelId: 'gemini-2.5-flash',
@@ -262,6 +242,7 @@ export const MODELS_DB: Record<string, ModelInfo> = {
     supportsCaching: true,
     supportsStreaming: true,
     version: '2.5',
+    pricing: { input: 0.30, output: 2.50, cacheWrite: null, cacheRead: 0.03 },
   },
 };
 

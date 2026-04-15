@@ -31,6 +31,7 @@ export abstract class BaseTester {
     'caching',
     'thinking',
     'identity',
+    'fingerprint',
     'streaming',
     'latency',
     'stability',
@@ -46,6 +47,7 @@ export abstract class BaseTester {
     caching:         '缓存支持',
     thinking:        '思考/推理能力',
     identity:        '身份验证',
+    fingerprint:     '模型指纹',
     streaming:       '流式传输',
     latency:         '响应延迟',
     stability:       '稳定性（多次请求）',
@@ -64,6 +66,7 @@ export abstract class BaseTester {
   abstract testCaching(): Promise<TestResult>;
   abstract testThinking(): Promise<TestResult>;
   abstract testIdentity(): Promise<TestResult>;
+  abstract testFingerprint(): Promise<TestResult>;
   abstract testStability(): Promise<TestResult>;
   abstract testConcurrency(): Promise<TestResult>;
   abstract testStreaming(): Promise<TestResult>;
@@ -79,6 +82,7 @@ export abstract class BaseTester {
       caching:         () => this.testCaching(),
       thinking:        () => this.testThinking(),
       identity:        () => this.testIdentity(),
+      fingerprint:     () => this.testFingerprint(),
       streaming:       () => this.testStreaming(),
       latency:         () => this.testLatency(),
       stability:       () => this.testStability(),

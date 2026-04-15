@@ -39,6 +39,14 @@ export interface TestSuiteResult {
   };
 }
 
+// Pricing per 1M tokens (USD), null = not available
+export interface ModelPricing {
+  input: number;
+  output: number;
+  cacheWrite: number | null;
+  cacheRead: number | null;
+}
+
 // Official model information for verification
 export interface ModelInfo {
   modelId: string;
@@ -51,6 +59,7 @@ export interface ModelInfo {
   supportsCaching: boolean;
   supportsStreaming: boolean;
   version?: string;
+  pricing: ModelPricing;
 }
 
 export interface QuotaExhaustedError extends Error {

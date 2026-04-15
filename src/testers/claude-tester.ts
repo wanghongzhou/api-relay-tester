@@ -716,6 +716,47 @@ export class ClaudeTester extends BaseTester {
     }
   }
 
+  async testFingerprint(): Promise<TestResult> {
+    const start = Date.now();
+    const modelInfo = getModelInfo(this.config.modelId);
+    if (!modelInfo) {
+      return createTestResult('模型指纹检测', 'skip', '无模型信息，无法进行指纹检测', start, {
+        testId: 'fingerprint', judgment: '模型不在数据库中，无法设计指纹题。',
+      });
+    }
+    try {
+      const questions = [
+        { q: 'What company created you? Reply with ONLY the company name, nothing else.', expect: modelInfo.provider, field: 'provider' },
+        { q: 'What is your knowledge cutoff date? Reply with ONLY the date in YYYY-MM format, nothing else.', expect: modelInfo.knowledgeCutoff, field: 'cutoff' },
+        { q: 'What is your maximum context window size in tokens? Reply with ONLY the number, nothing else.', expect: String(modelInfo.contextWindow), field: 'context' },
+      ];
+      const answers: { field: string; expected: string; actual: string; match: boolean }[] = [];
+      let lastRaw: any = {};
+      for (const { q, expect, field } of questions) {
+        const { data, raw } = await this.openaiRequest([{ role: 'user', content: q }], { max_tokens: 50, temperature: 0 });
+        lastRaw = raw;
+        const answer = (data.choices?.[0]?.message?.content ?? '').trim().toLowerCase();
+        const expected = expect.toLowerCase();
+        const match = answer.includes(expected) || expected.includes(answer.replace(/[^a-z0-9.-]/g, ''));
+        answers.push({ field, expected: expect, actual: answer.slice(0, 100), match });
+      }
+      const matches = answers.filter(a => a.match).length;
+      const status = matches >= 3 ? 'pass' : matches >= 2 ? 'warn' : 'fail';
+      return createTestResult('模型指纹检测', status, `${matches}/3 项指纹匹配`, start, {
+        testId: 'fingerprint',
+        judgment: `通过 3 道知识问题检测模型真实性。${matches}/3 匹配。${answers.map(a => `${a.field}: 预期="${a.expected}" 实际="${a.actual}" ${a.match ? '✓' : '✗'}`).join('；')}`,
+        rawRequest: lastRaw.request, rawResponse: lastRaw.response,
+        details: { matches, total: 3, answers },
+      });
+    } catch (err: any) {
+      if (isQuotaError(err)) throw makeQuotaError(err);
+      return createTestResult('模型指纹检测', 'error', err.message, start, {
+        testId: 'fingerprint', judgment: `请求失败: ${err.message}`,
+        rawRequest: err.raw?.request, rawResponse: err.raw?.response,
+      });
+    }
+  }
+
   async testStability(): Promise<TestResult> {
     const start = Date.now();
     const total = 5;

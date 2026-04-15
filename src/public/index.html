@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>模型中转测试工具</title>
 <link rel="stylesheet" href="/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 </head>
 <body>
 <div class="container">
@@ -31,7 +32,7 @@
         <label>服务商</label>
         <select id="provider">
           <option value="">自动检测</option>
-          <option value="openai">OpenAI</option>
+          <option value="openai">GPT (OpenAI)</option>
           <option value="claude">Claude (Anthropic)</option>
           <option value="gemini">Gemini (Google)</option>
         </select>
@@ -104,6 +105,28 @@
     </div>
   </div>
 
+  <!-- Multi-relay compare -->
+  <div class="card" id="compareCard" style="padding:0;">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 20px;cursor:pointer;user-select:none;" onclick="toggleCompareBody()">
+      <h2 style="margin:0;font-size:15px;">多中转对比</h2>
+      <span style="font-size:11px;color:var(--text2);" id="compareToggleHint">展开 ▼</span>
+    </div>
+    <div class="test-body" id="compareBody">
+      <div style="padding:0 20px 16px;">
+        <label>中转地址列表（每行一个，最多 5 个）</label>
+        <textarea id="compareUrls" rows="3" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:monospace;resize:vertical;" placeholder="https://api.example1.com&#10;https://api.example2.com"></textarea>
+        <label class="mt8" style="display:block;">选择对比测试项</label>
+        <div id="compareTestChecks" class="mt4" style="display:flex;flex-wrap:wrap;gap:8px;font-size:12px;"></div>
+        <div class="mt8" style="display:flex;gap:6px;">
+          <button class="btn btn-sm" onclick="toggleCompareChecks(true)">全选</button>
+          <button class="btn btn-sm" onclick="toggleCompareChecks(false)">全不选</button>
+          <button class="btn btn-primary btn-sm" id="compareBtn" onclick="runCompare()">开始对比</button>
+        </div>
+        <div id="compareResult" class="mt8" style="display:none;overflow-x:auto;"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Tests -->
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -117,8 +140,26 @@
 
   <!-- Summary -->
   <div class="card hidden" id="summaryCard">
-    <h2>汇总</h2>
-    <div class="summary-bar" id="summaryBar"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h2 style="margin:0">汇总</h2>
+      <div style="display:flex;gap:6px;">
+        <button class="btn btn-sm" onclick="exportJSON()">导出 JSON</button>
+        <button class="btn btn-sm btn-primary" onclick="exportHTMLReport()">生成报告</button>
+      </div>
+    </div>
+    <div class="summary-bar mt8" id="summaryBar"></div>
+  </div>
+
+  <!-- History -->
+  <div class="card" id="historyCard">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h2 style="margin:0">历史记录</h2>
+      <div style="display:flex;gap:6px;">
+        <button class="btn btn-sm" onclick="clearHistory()" id="clearHistoryBtn">清空</button>
+      </div>
+    </div>
+    <div id="historyChart" class="mt8" style="display:none;"><canvas id="trendCanvas" height="200"></canvas></div>
+    <div id="historyList" class="mt8" style="font-size:13px;color:var(--text2);">暂无历史记录</div>
   </div>
 </div>
 
