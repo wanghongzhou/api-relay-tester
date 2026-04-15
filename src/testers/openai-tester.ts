@@ -1,13 +1,13 @@
-import { TestResult } from './types.js';
+import { TestResult } from '../types/index.js';
 import { BaseTester } from './base-tester.js';
-import { getModelInfo } from './models-info.js';
+import { getModelInfo } from '../models/index.js';
 import {
   createTestResult,
   isQuotaError,
   makeQuotaError,
   fetchLongDocument,
   generatePaddingText,
-} from './utils.js';
+} from '../utils/index.js';
 
 export class OpenAITester extends BaseTester {
 

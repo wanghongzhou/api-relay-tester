@@ -1,13 +1,13 @@
-import { TestResult } from './types.js';
+import { TestResult } from '../types/index.js';
 import { BaseTester, RawExchange } from './base-tester.js';
-import { getModelInfo } from './models-info.js';
+import { getModelInfo } from '../models/index.js';
 import {
   createTestResult,
   isQuotaError,
   makeQuotaError,
   generatePaddingText,
   sleep,
-} from './utils.js';
+} from '../utils/index.js';
 
 /** Mask API keys in URLs and headers for raw captures */
 function maskKey(url: string, apiKey: string): string {

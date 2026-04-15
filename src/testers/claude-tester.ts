@@ -1,6 +1,6 @@
-import { TestResult } from './types.js';
+import { TestResult } from '../types/index.js';
 import { BaseTester, RawExchange } from './base-tester.js';
-import { getModelInfo } from './models-info.js';
+import { getModelInfo } from '../models/index.js';
 import {
   createTestResult,
   isQuotaError,
@@ -8,7 +8,7 @@ import {
   generatePaddingText,
   fetchLongDocument,
   sleep,
-} from './utils.js';
+} from '../utils/index.js';
 
 export class ClaudeTester extends BaseTester {
 

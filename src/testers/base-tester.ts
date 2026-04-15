@@ -1,5 +1,5 @@
-import { TestConfig, TestResult, TestSuiteResult } from './types.js';
-import { getModelInfo } from './models-info.js';
+import { TestConfig, TestResult, TestSuiteResult } from '../types/index.js';
+import { getModelInfo } from '../models/index.js';
 import {
   createTestResult,
   buildSuiteResult,
@@ -7,7 +7,7 @@ import {
   printSuiteSummary,
   isQuotaError,
   sleep,
-} from './utils.js';
+} from '../utils/index.js';
 
 /** Captured HTTP exchange for display in the UI */
 export interface RawExchange {

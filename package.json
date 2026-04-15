@@ -2,10 +2,10 @@
   "name": "apitest",
   "version": "1.0.0",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "src/cli/index.ts",
   "scripts": {
-    "start": "npx tsx src/server.ts",
-    "test": "npx tsx src/index.ts",
+    "start": "npx tsx src/server/index.ts",
+    "test": "npx tsx src/cli/index.ts",
     "build": "tsc"
   },
   "keywords": [],
@@ -16,12 +16,16 @@
     "@anthropic-ai/sdk": "^0.88.0",
     "@google/generative-ai": "^0.24.1",
     "chalk": "^5.6.2",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
     "node-fetch": "^3.3.2",
     "openai": "^6.34.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.2"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/node": "^25.6.0"
   }
 }

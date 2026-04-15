@@ -1,19 +1,20 @@
 #!/usr/bin/env tsx
 /**
- * Model Testing Tool - Unified Entry Point
+ * Model Testing Tool - CLI Entry Point
  *
  * Tests relay/proxy services for authenticity, stability, and compliance.
  *
  * Usage:
- *   npx tsx src/index.ts --base-url <url> --model <id> --api-key <key> [--provider <openai|claude|gemini>]
+ *   npx tsx src/cli/index.ts --base-url <url> --model <id> --api-key <key> [--provider <openai|claude|gemini>]
  *
  * Examples:
- *   npx tsx src/index.ts --base-url https://api.favorais.com --model claude-opus-4-6 --api-key sk-xxx --provider claude
- *   npx tsx src/index.ts --base-url https://api.favorais.com --model gpt-5.4 --api-key sk-xxx
+ *   npx tsx src/cli/index.ts --base-url https://api.favorais.com --model claude-opus-4-6 --api-key sk-xxx --provider claude
+ *   npx tsx src/cli/index.ts --base-url https://api.favorais.com --model gpt-5.4 --api-key sk-xxx
  */
 
-import { TestConfig, TestSuiteResult } from './types.js';
-import { printSuiteSummary } from './utils.js';
+import { TestConfig, TestSuiteResult } from '../types/index.js';
+import { printSuiteSummary } from '../utils/index.js';
+import { createTester } from '../testers/index.js';
 
 // Auto-detect provider from model ID
 function detectProvider(modelId: string): 'openai' | 'claude' | 'gemini' {
@@ -56,7 +57,7 @@ function parseArgs(): TestConfig {
 模型测试工具 - 测试中转/代理服务的真实性
 
 用法:
-  npx tsx src/index.ts [选项]
+  npx tsx src/cli/index.ts [选项]
 
 选项:
   --base-url, -u   服务商基础 URL（不含 /v1）
@@ -86,28 +87,9 @@ function parseArgs(): TestConfig {
   return { baseUrl, modelId, apiKey, provider };
 }
 
-async function loadTester(config: TestConfig) {
-  switch (config.provider) {
-    case 'openai': {
-      const { default: OpenAITester } = await import('./openai-tester.js');
-      return new OpenAITester(config);
-    }
-    case 'claude': {
-      const { default: ClaudeTester } = await import('./claude-tester.js');
-      return new ClaudeTester(config);
-    }
-    case 'gemini': {
-      const { default: GeminiTester } = await import('./gemini-tester.js');
-      return new GeminiTester(config);
-    }
-    default:
-      throw new Error(`Unknown provider: ${config.provider}`);
-  }
-}
-
 // Exported for programmatic use
 export async function runTest(config: TestConfig): Promise<TestSuiteResult> {
-  const tester = await loadTester(config);
+  const tester = await createTester(config);
   return tester.runAll();
 }
 

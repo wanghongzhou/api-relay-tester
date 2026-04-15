@@ -1,4 +1,4 @@
-import { ModelInfo } from './types.js';
+import { ModelInfo } from '../types/index.js';
 
 /**
  * Official model information — latest generations per provider (with open API).
