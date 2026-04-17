@@ -37,12 +37,18 @@ function importMetaPlugin() {
     name: 'import-meta-to-cjs',
     setup(b) {
       b.onLoad({ filter: /[/\\]src[/\\]server[/\\]app\.ts$/ }, async (args) => {
-        const src = await readFile(args.path, 'utf8');
-        const patched = src.replace(
+        let src = await readFile(args.path, 'utf8');
+        // Replace import.meta.url with CJS equivalent
+        src = src.replace(
           /import\.meta\.url/g,
           'require("url").pathToFileURL(__filename).href',
         );
-        return { contents: patched, loader: 'ts' };
+        // Fix static path: in bundled layout public/ is next to main.cjs, not ../public
+        src = src.replace(
+          /path\.join\(__dirname,\s*'\.\.'\s*,\s*'public'\)/,
+          "path.join(__dirname, 'public')",
+        );
+        return { contents: src, loader: 'ts' };
       });
     },
   };
