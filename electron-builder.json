@@ -1,0 +1,19 @@
+{
+  "appId": "com.apitest.relay-tester",
+  "productName": "API中转测试工具",
+  "directories": {
+    "output": "../release"
+  },
+  "files": [
+    "main.cjs",
+    "public/**/*",
+    "package.json"
+  ],
+  "win": {
+    "target": "portable",
+    "signAndEditExecutable": false
+  },
+  "portable": {
+    "artifactName": "api-relay-tester.exe"
+  }
+}

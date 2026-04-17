@@ -111,5 +111,6 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px r
 .history-time { font-size: 11px; color: var(--gray); min-width: 130px; text-align: right; }
 
 .hidden { display: none !important; }
+.mt4 { margin-top: 4px; }
 .mt8 { margin-top: 8px; }
 .mt12 { margin-top: 12px; }

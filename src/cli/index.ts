@@ -37,19 +37,19 @@ function parseArgs(): TestConfig {
     switch (args[i]) {
       case '--base-url':
       case '-u':
-        baseUrl = args[++i];
+        baseUrl = args[++i] ?? '';
         break;
       case '--model':
       case '-m':
-        modelId = args[++i];
+        modelId = args[++i] ?? '';
         break;
       case '--api-key':
       case '-k':
-        apiKey = args[++i];
+        apiKey = args[++i] ?? '';
         break;
       case '--provider':
       case '-p':
-        provider = args[++i] as any;
+        provider = (args[++i] ?? '') as any;
         break;
       case '--help':
       case '-h':

@@ -161,6 +161,40 @@ export abstract class BaseTester {
     return {};
   }
 
+  /** Parse a rejected concurrency-probe error into a compact record.
+   *  Errors thrown from openaiRequest/nativeRequest carry err.status and err.raw.response.body. */
+  protected extractConcurrencyError(err: any): { status?: number; code?: string; type?: string; message: string } {
+    const status = typeof err?.status === 'number' ? err.status : undefined;
+    let parsed: any = err?.raw?.response?.body;
+    if (typeof parsed === 'string') {
+      try { parsed = JSON.parse(parsed); } catch { /* keep as string */ }
+    }
+    const errObj = (parsed && typeof parsed === 'object') ? (parsed.error ?? parsed) : undefined;
+    const code = errObj?.code != null ? String(errObj.code) : undefined;
+    // OpenAI/Anthropic use `type`; Google uses `status` string (e.g. "RESOURCE_EXHAUSTED")
+    const type = errObj?.type ?? (typeof errObj?.status === 'string' ? errObj.status : undefined);
+    const apiMsg = errObj?.message;
+    const fallback = String(err?.message ?? '')
+      .replace(/^Quota exhausted:\s*/, '')
+      .replace(/^HTTP \d+:\s*/, '');
+    const message = String(apiMsg ?? fallback ?? '').slice(0, 200);
+    return { status, code, type, message };
+  }
+
+  /** Group a list of concurrency errors by "status type/code" and return a short label like "429 rate_limit×3, 500×2". */
+  protected summarizeConcurrencyErrors(errors: Array<{ status?: number; code?: string; type?: string }>): string {
+    if (!errors.length) return '';
+    const groups = new Map<string, number>();
+    for (const e of errors) {
+      const tag = e.type || e.code || '';
+      const key = [e.status ?? '?', tag].filter(v => v !== '' && v !== undefined).join(' ');
+      groups.set(key, (groups.get(key) || 0) + 1);
+    }
+    return Array.from(groups.entries())
+      .map(([k, n]) => n > 1 ? `${k}×${n}` : k)
+      .join(', ');
+  }
+
   /** Make an OpenAI-format chat completion request. Returns { data, raw }.
    *  When useStreaming is enabled, transparently uses streaming and assembles the response. */
   protected async openaiRequest(

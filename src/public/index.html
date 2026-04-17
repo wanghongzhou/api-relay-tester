@@ -46,7 +46,10 @@
       </div>
       <div>
         <label>API 密钥 / 令牌</label>
-        <input type="password" id="apiKey" placeholder="sk-...">
+        <div style="display:flex;gap:0;">
+          <input type="password" id="apiKey" placeholder="sk-..." style="border-top-right-radius:0;border-bottom-right-radius:0;">
+          <button type="button" id="toggleApiKey" onclick="toggleApiKeyVisibility()" style="padding:0 10px;border:1px solid var(--border);border-left:none;border-radius:0 6px 6px 0;background:#fff;cursor:pointer;font-size:13px;color:var(--text2);white-space:nowrap;">显示</button>
+        </div>
       </div>
     </div>
     <div id="modelBar" class="model-bar hidden"></div>
@@ -113,8 +116,11 @@
     </div>
     <div class="test-body" id="compareBody">
       <div style="padding:0 20px 16px;">
-        <label>中转地址列表（每行一个，最多 5 个）</label>
-        <textarea id="compareUrls" rows="3" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:monospace;resize:vertical;" placeholder="https://api.example1.com&#10;https://api.example2.com"></textarea>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <label style="margin:0;">中转列表（最多 5 个，密钥留空则使用上方全局密钥）</label>
+          <button class="btn btn-sm" onclick="addCompareRow()" id="addCompareRowBtn">+ 添加</button>
+        </div>
+        <div id="compareRows" class="mt4" style="display:flex;flex-direction:column;gap:6px;"></div>
         <label class="mt8" style="display:block;">选择对比测试项</label>
         <div id="compareTestChecks" class="mt4" style="display:flex;flex-wrap:wrap;gap:8px;font-size:12px;"></div>
         <div class="mt8" style="display:flex;gap:6px;">

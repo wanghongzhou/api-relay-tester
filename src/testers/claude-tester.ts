@@ -733,9 +733,14 @@ export class ClaudeTester extends BaseTester {
       const answers: { field: string; expected: string; actual: string; match: boolean }[] = [];
       let lastRaw: any = {};
       for (const { q, expect, field } of questions) {
-        const { data, raw } = await this.openaiRequest([{ role: 'user', content: q }], { max_tokens: 50, temperature: 0 });
+        // Always use native Anthropic endpoint for Claude fingerprint to avoid
+        // OpenAI-compat quirks on some relays (e.g. rejection of temperature=0).
+        const { data, raw } = await this.nativeRequest({
+          max_tokens: 50,
+          messages: [{ role: 'user', content: q }],
+        });
         lastRaw = raw;
-        const answer = (data.choices?.[0]?.message?.content ?? '').trim().toLowerCase();
+        const answer = (data.content?.map((b: any) => b.text || '').join('') ?? '').trim().toLowerCase();
         const expected = expect.toLowerCase();
         const match = answer.includes(expected) || expected.includes(answer.replace(/[^a-z0-9.-]/g, ''));
         answers.push({ field, expected: expect, actual: answer.slice(0, 100), match });
@@ -816,11 +821,18 @@ export class ClaudeTester extends BaseTester {
     let maxConcurrency = 0;
     let lastFailLevel = 0;
     let rateLimitInfo = '';
-    const roundDetails: { level: number; successes: number; failures: number; avgMs: number }[] = [];
+    const roundDetails: {
+      level: number;
+      successes: number;
+      failures: number;
+      avgMs: number;
+      errorSummary?: string;
+      errorSamples?: Array<{ status?: number; code?: string; type?: string; message: string }>;
+    }[] = [];
 
     try {
       for (const level of levels) {
-        const results: { ok: boolean; ms: number; rateLimit?: any }[] = [];
+        const results: { ok: boolean; ms: number; rateLimit?: any; error?: { status?: number; code?: string; type?: string; message: string } }[] = [];
 
         const tasks = Array.from({ length: level }, () => {
           const t0 = Date.now();
@@ -842,7 +854,8 @@ export class ClaudeTester extends BaseTester {
             }
             if (rateMatch) rateLimitInfo = `${rateMatch[1]} requests/${rateMatch[2]}`;
             if (rateLimit?.limit) rateLimitInfo = `${rateLimit.limit} RPM`;
-            results.push({ ok: false, ms: Date.now() - t0, rateLimit });
+            const error = this.extractConcurrencyError(err);
+            results.push({ ok: false, ms: Date.now() - t0, rateLimit, error });
           });
         });
 
@@ -853,7 +866,19 @@ export class ClaudeTester extends BaseTester {
         const times = results.filter(r => r.ok).map(r => r.ms);
         const avgMs = times.length > 0 ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : 0;
 
-        roundDetails.push({ level, successes, failures, avgMs });
+        const roundErrors = results.filter(r => !r.ok && r.error).map(r => r.error!);
+        const errorSummary = this.summarizeConcurrencyErrors(roundErrors);
+        const seen = new Set<string>();
+        const errorSamples: typeof roundErrors = [];
+        for (const e of roundErrors) {
+          const key = `${e.status ?? ''}|${e.type ?? ''}|${e.code ?? ''}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          errorSamples.push(e);
+          if (errorSamples.length >= 3) break;
+        }
+
+        roundDetails.push({ level, successes, failures, avgMs, errorSummary, errorSamples });
 
         if (successes === level) {
           maxConcurrency = level;
@@ -867,9 +892,16 @@ export class ClaudeTester extends BaseTester {
         await sleep(500);
       }
 
-      const summary = roundDetails.map(r => `${r.level}并发:${r.successes}成功/${r.failures}失败(${r.avgMs}ms)`).join(' → ');
+      const summary = roundDetails.map(r => {
+        const base = `${r.level}并发:${r.successes}成功/${r.failures}失败(${r.avgMs}ms)`;
+        return r.errorSummary ? `${base} [${r.errorSummary}]` : base;
+      }).join(' → ');
       const hitCeiling = lastFailLevel > 0;
       const limitNote = rateLimitInfo ? `（接口限制: ${rateLimitInfo}）` : '';
+      const failRound = roundDetails[roundDetails.length - 1];
+      const errorTail = hitCeiling && failRound?.errorSamples?.length
+        ? ` | 错误样例: ${failRound.errorSamples.map(e => `[${e.status ?? '?'}${e.type || e.code ? ' ' + (e.type || e.code) : ''}] ${e.message}`).join(' ; ')}`
+        : '';
       const label = hitCeiling
         ? `并发上限: ${maxConcurrency}${limitNote}`
         : `并发上限: ≥${maxConcurrency}`;
@@ -877,20 +909,20 @@ export class ClaudeTester extends BaseTester {
       if (maxConcurrency >= 20) {
         return createTestResult('并发量检测', 'pass', label, start, {
           testId: 'concurrency',
-          judgment: `逐级递增测试。${label}。${summary}`,
+          judgment: `逐级递增测试。${label}。${summary}${errorTail}`,
           details: { maxConcurrency, hitCeiling, rateLimitInfo, rounds: roundDetails },
         });
       }
       if (maxConcurrency >= 5) {
         return createTestResult('并发量检测', 'warn', label, start, {
           testId: 'concurrency',
-          judgment: `${label}，中等水平。${summary}`,
+          judgment: `${label}，中等水平。${summary}${errorTail}`,
           details: { maxConcurrency, hitCeiling, rateLimitInfo, rounds: roundDetails },
         });
       }
       return createTestResult('并发量检测', 'fail', label, start, {
         testId: 'concurrency',
-        judgment: `${label}，并发能力差。${summary}`,
+        judgment: `${label}，并发能力差。${summary}${errorTail}`,
         details: { maxConcurrency, hitCeiling, rateLimitInfo, rounds: roundDetails },
       });
     } catch (err: any) {

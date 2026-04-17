@@ -19,5 +19,11 @@ export function isQuotaError(error: any): boolean {
 export function makeQuotaError(original: Error): QuotaExhaustedError {
   const err = new Error(`Quota exhausted: ${original.message}`) as QuotaExhaustedError;
   err.isQuotaError = true;
+  // Preserve diagnostic fields from the original error so downstream handlers
+  // (e.g. concurrency test error extraction) can still read HTTP status / raw body.
+  const src = original as any;
+  if (src?.status !== undefined) (err as any).status = src.status;
+  if (src?.statusCode !== undefined) (err as any).statusCode = src.statusCode;
+  if (src?.raw !== undefined) (err as any).raw = src.raw;
   return err;
 }

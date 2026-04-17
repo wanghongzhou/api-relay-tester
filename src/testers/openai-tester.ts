@@ -421,11 +421,18 @@ export class OpenAITester extends BaseTester {
     let maxConcurrency = 0;
     let lastFailLevel = 0;
     let rateLimitInfo = '';
-    const roundDetails: { level: number; successes: number; failures: number; avgMs: number }[] = [];
+    const roundDetails: {
+      level: number;
+      successes: number;
+      failures: number;
+      avgMs: number;
+      errorSummary?: string;
+      errorSamples?: Array<{ status?: number; code?: string; type?: string; message: string }>;
+    }[] = [];
 
     try {
       for (const level of levels) {
-        const results: { ok: boolean; ms: number }[] = [];
+        const results: { ok: boolean; ms: number; error?: { status?: number; code?: string; type?: string; message: string } }[] = [];
         const tasks = Array.from({ length: level }, () => {
           const t0 = Date.now();
           return this.openaiRequest([{ role: 'user', content: 'hi' }], { max_tokens: 1 })
@@ -434,7 +441,8 @@ export class OpenAITester extends BaseTester {
               const msg = String(err.message || '');
               const rateMatch = msg.match(/(\d+)\s*requests?\s*per\s*(\w+)/i);
               if (rateMatch) rateLimitInfo = `${rateMatch[1]} requests/${rateMatch[2]}`;
-              results.push({ ok: false, ms: Date.now() - t0 });
+              const error = this.extractConcurrencyError(err);
+              results.push({ ok: false, ms: Date.now() - t0, error });
             });
         });
         await Promise.all(tasks);
@@ -442,17 +450,35 @@ export class OpenAITester extends BaseTester {
         const failures = results.filter(r => !r.ok).length;
         const times = results.filter(r => r.ok).map(r => r.ms);
         const avgMs = times.length > 0 ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : 0;
-        roundDetails.push({ level, successes, failures, avgMs });
+        const roundErrors = results.filter(r => !r.ok && r.error).map(r => r.error!);
+        const errorSummary = this.summarizeConcurrencyErrors(roundErrors);
+        const seen = new Set<string>();
+        const errorSamples: typeof roundErrors = [];
+        for (const e of roundErrors) {
+          const key = `${e.status ?? ''}|${e.type ?? ''}|${e.code ?? ''}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          errorSamples.push(e);
+          if (errorSamples.length >= 3) break;
+        }
+        roundDetails.push({ level, successes, failures, avgMs, errorSummary, errorSamples });
         if (successes === level) { maxConcurrency = level; } else { lastFailLevel = level; if (successes > maxConcurrency) maxConcurrency = successes; break; }
         await new Promise(r => setTimeout(r, 500));
       }
-      const summary = roundDetails.map(r => `${r.level}并发:${r.successes}成功/${r.failures}失败(${r.avgMs}ms)`).join(' → ');
+      const summary = roundDetails.map(r => {
+        const base = `${r.level}并发:${r.successes}成功/${r.failures}失败(${r.avgMs}ms)`;
+        return r.errorSummary ? `${base} [${r.errorSummary}]` : base;
+      }).join(' → ');
       const hitCeiling = lastFailLevel > 0;
       const limitNote = rateLimitInfo ? `（接口限制: ${rateLimitInfo}）` : '';
+      const failRound = roundDetails[roundDetails.length - 1];
+      const errorTail = hitCeiling && failRound?.errorSamples?.length
+        ? ` | 错误样例: ${failRound.errorSamples.map(e => `[${e.status ?? '?'}${e.type || e.code ? ' ' + (e.type || e.code) : ''}] ${e.message}`).join(' ; ')}`
+        : '';
       const label = hitCeiling ? `并发上限: ${maxConcurrency}${limitNote}` : `并发上限: ≥${maxConcurrency}`;
-      if (maxConcurrency >= 20) return createTestResult('并发量检测', 'pass', label, start, { testId: 'concurrency', judgment: `${label}。${summary}`, details: { maxConcurrency, hitCeiling, rateLimitInfo, rounds: roundDetails } });
-      if (maxConcurrency >= 5) return createTestResult('并发量检测', 'warn', label, start, { testId: 'concurrency', judgment: `${label}，中等。${summary}`, details: { maxConcurrency, hitCeiling, rateLimitInfo, rounds: roundDetails } });
-      return createTestResult('并发量检测', 'fail', label, start, { testId: 'concurrency', judgment: `${label}，差。${summary}`, details: { maxConcurrency, hitCeiling, rateLimitInfo, rounds: roundDetails } });
+      if (maxConcurrency >= 20) return createTestResult('并发量检测', 'pass', label, start, { testId: 'concurrency', judgment: `${label}。${summary}${errorTail}`, details: { maxConcurrency, hitCeiling, rateLimitInfo, rounds: roundDetails } });
+      if (maxConcurrency >= 5) return createTestResult('并发量检测', 'warn', label, start, { testId: 'concurrency', judgment: `${label}，中等。${summary}${errorTail}`, details: { maxConcurrency, hitCeiling, rateLimitInfo, rounds: roundDetails } });
+      return createTestResult('并发量检测', 'fail', label, start, { testId: 'concurrency', judgment: `${label}，差。${summary}${errorTail}`, details: { maxConcurrency, hitCeiling, rateLimitInfo, rounds: roundDetails } });
     } catch (err: any) {
       return createTestResult('并发量检测', 'error', err.message, start, { testId: 'concurrency', judgment: `失败: ${err.message}`, details: { maxConcurrency, rounds: roundDetails } });
     }

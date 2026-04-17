@@ -1,24 +1,24 @@
 {
-  "name": "apitest",
+  "name": "api-relay-tester",
   "version": "1.0.0",
   "type": "module",
-  "main": "src/cli/index.ts",
+  "main": "dist/main.cjs",
   "scripts": {
     "start": "npx tsx src/server/index.ts",
     "test": "npx tsx src/cli/index.ts",
-    "build": "tsc"
+    "build": "tsc",
+    "build:exe": "node scripts/build-exe.mjs",
+    "electron:dev": "node scripts/build-exe.mjs --dev"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "API relay/proxy testing tool for OpenAI, Claude, and Gemini",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",
     "@google/generative-ai": "^0.24.1",
-    "chalk": "^5.6.2",
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "node-fetch": "^3.3.2",
     "openai": "^6.34.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.2"
@@ -26,6 +26,9 @@
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
-    "@types/node": "^25.6.0"
+    "@types/node": "^25.6.0",
+    "esbuild": "^0.28.0",
+    "electron": "^36.3.1",
+    "electron-builder": "^26.0.12"
   }
 }

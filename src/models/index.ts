@@ -11,9 +11,22 @@ import { ModelInfo } from '../types/index.js';
 export const MODELS_DB: Record<string, ModelInfo> = {
 
   // ══════════════════════════════════════════════════════════════
-  //  Anthropic — 4.6 (Opus / Sonnet) + 4.5 (Haiku)
+  //  Anthropic — 4.7 (Opus) + 4.6 (Opus / Sonnet) + 4.5 (Haiku)
   // ══════════════════════════════════════════════════════════════
 
+  'claude-opus-4-7': {
+    modelId: 'claude-opus-4-7',
+    provider: 'anthropic',
+    displayName: 'Claude Opus 4.7',
+    contextWindow: 1000000,
+    previousContextWindow: 1000000,
+    knowledgeCutoff: '2025-05',
+    supportsThinking: true,
+    supportsCaching: true,
+    supportsStreaming: true,
+    version: '4.7',
+    pricing: { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.50 },
+  },
   'claude-opus-4-6': {
     modelId: 'claude-opus-4-6',
     provider: 'anthropic',

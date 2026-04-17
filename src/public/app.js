@@ -55,6 +55,14 @@ function syncBaseUrlPreset() {
   }
 }
 
+function toggleApiKeyVisibility() {
+  const input = document.getElementById('apiKey');
+  const btn = document.getElementById('toggleApiKey');
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  btn.textContent = show ? '隐藏' : '显示';
+}
+
 function onBaseUrlPresetChange() {
   const preset = document.getElementById('baseUrlPreset');
   const input = document.getElementById('baseUrl');
@@ -83,6 +91,8 @@ async function init() {
   TESTS = tests;
   renderTestCards();
   renderCompareChecks();
+  addCompareRow();
+  addCompareRow();
 
   // Restore saved config
   loadConfig();
@@ -168,10 +178,10 @@ function renderTestCards() {
       </div>
       <div class="test-body" id="body-${t.id}">
         <div class="tabs" id="tabs-${t.id}">
-          <div class="tab active" onclick="switchTab('${t.id}','conclusion')">结论</div>
-          <div class="tab" onclick="switchTab('${t.id}','request')">请求</div>
-          <div class="tab" onclick="switchTab('${t.id}','response')">响应</div>
-          <div class="tab" onclick="switchTab('${t.id}','judgment')">判断依据</div>
+          <div class="tab active" onclick="switchTab('${t.id}','conclusion',event)">结论</div>
+          <div class="tab" onclick="switchTab('${t.id}','request',event)">请求</div>
+          <div class="tab" onclick="switchTab('${t.id}','response',event)">响应</div>
+          <div class="tab" onclick="switchTab('${t.id}','judgment',event)">判断依据</div>
         </div>
         <div class="tab-content active" id="tc-${t.id}-conclusion">
           <div class="conclusion" id="conclusion-${t.id}">
@@ -200,10 +210,10 @@ function toggleTestBody(testId) {
   document.getElementById(`body-${testId}`).classList.toggle('open');
 }
 
-function switchTab(testId, tabName) {
+function switchTab(testId, tabName, e) {
   // Update tab buttons
   document.querySelectorAll(`#tabs-${testId} .tab`).forEach(el => el.classList.remove('active'));
-  event.target.classList.add('active');
+  if (e && e.target) e.target.classList.add('active');
   // Update content
   ['conclusion','request','response','judgment'].forEach(n => {
     document.getElementById(`tc-${testId}-${n}`).classList.remove('active');
@@ -562,7 +572,13 @@ function generateCustomJSON() {
       messages: [{ role: 'user', content: '你好，请做一下自我介绍' }],
     };
   }
-  document.getElementById('customJSON').value = JSON.stringify(json, null, 2);
+  const ta = document.getElementById('customJSON');
+  ta.value = JSON.stringify(json, null, 2);
+
+  // Visual feedback so regeneration is visible even when content is unchanged
+  ta.style.transition = 'background 0.15s';
+  ta.style.background = '#ddf4ff';
+  setTimeout(() => { ta.style.background = ''; }, 300);
 }
 
 function switchCustomTab(tab) {
@@ -879,6 +895,55 @@ th{background:#f5f6f8;font-weight:600}
 }
 
 // ── Multi-relay compare ──
+let compareRowCount = 0;
+
+function addCompareRow(url, key) {
+  const container = document.getElementById('compareRows');
+  if (container.children.length >= 5) return;
+  const idx = compareRowCount++;
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:6px;align-items:center;';
+  row.id = `compare-row-${idx}`;
+  row.innerHTML =
+    `<span style="font-size:12px;color:var(--text2);min-width:16px;">${container.children.length + 1}</span>` +
+    `<input type="text" class="compare-url" placeholder="https://api.example.com" value="${url || ''}" style="flex:2;font-size:12px;">` +
+    `<input type="password" class="compare-key" placeholder="密钥（可选）" value="${key || ''}" style="flex:1;font-size:12px;">` +
+    `<button class="btn btn-sm" onclick="removeCompareRow('compare-row-${idx}')" style="padding:2px 8px;color:var(--red);">✕</button>`;
+  container.appendChild(row);
+  updateCompareRowNumbers();
+  updateAddBtn();
+}
+
+function removeCompareRow(id) {
+  const el = document.getElementById(id);
+  if (el) el.remove();
+  updateCompareRowNumbers();
+  updateAddBtn();
+}
+
+function updateCompareRowNumbers() {
+  const rows = document.getElementById('compareRows').children;
+  for (let i = 0; i < rows.length; i++) {
+    rows[i].querySelector('span').textContent = i + 1;
+  }
+}
+
+function updateAddBtn() {
+  const btn = document.getElementById('addCompareRowBtn');
+  btn.disabled = document.getElementById('compareRows').children.length >= 5;
+}
+
+function getCompareEntries() {
+  const rows = document.getElementById('compareRows').children;
+  const entries = [];
+  for (const row of rows) {
+    const url = row.querySelector('.compare-url').value.trim().replace(/\/+$/, '');
+    const key = row.querySelector('.compare-key').value.trim();
+    if (url) entries.push({ url, key });
+  }
+  return entries;
+}
+
 function toggleCompareBody() {
   const body = document.getElementById('compareBody');
   const hint = document.getElementById('compareToggleHint');
@@ -903,16 +968,19 @@ function toggleCompareChecks(checked) {
 
 async function runCompare() {
   const modelId = document.getElementById('modelId').value.trim();
-  const apiKey = document.getElementById('apiKey').value.trim();
+  const globalApiKey = document.getElementById('apiKey').value.trim();
   let provider = document.getElementById('provider').value;
-  if (!modelId || !apiKey) { alert('请先填写模型 ID 和 API 密钥'); return; }
+  if (!modelId) { alert('请先填写模型 ID'); return; }
   if (!provider) {
     const l = modelId.toLowerCase();
     provider = l.includes('claude') ? 'claude' : l.includes('gemini') ? 'gemini' : 'openai';
   }
 
-  const urls = document.getElementById('compareUrls').value.trim().split('\n').map(u => u.trim()).filter(u => u).slice(0, 5);
-  if (urls.length < 2) { alert('请至少输入 2 个中转地址'); return; }
+  const entries = getCompareEntries();
+  if (entries.length < 2) { alert('请至少输入 2 个中转地址'); return; }
+
+  const needGlobal = entries.some(e => !e.key);
+  if (needGlobal && !globalApiKey) { alert('部分地址未指定密钥，请填写上方全局 API 密钥作为默认值'); return; }
 
   const btn = document.getElementById('compareBtn');
   btn.disabled = true;
@@ -926,10 +994,10 @@ async function runCompare() {
   if (testIds.length === 0) { alert('请至少选择一项测试'); btn.disabled = false; btn.textContent = '开始对比'; return; }
   const allResults = {};
 
-  for (const url of urls) {
-    allResults[url] = {};
-    const baseUrl = url.replace(/\/+$/, '');
-    const cfg = { baseUrl, modelId, apiKey, provider };
+  for (const entry of entries) {
+    allResults[entry.url] = {};
+    const apiKey = entry.key || globalApiKey;
+    const cfg = { baseUrl: entry.url, modelId, apiKey, provider };
     if (document.getElementById('useStreaming').checked) cfg.useStreaming = 'true';
 
     for (const testId of testIds) {
@@ -941,8 +1009,8 @@ async function runCompare() {
           es.addEventListener('error', () => { resolve(null); es.close(); });
           es.onerror = () => { resolve(null); es.close(); };
         });
-        allResults[url][testId] = result;
-      } catch { allResults[url][testId] = null; }
+        allResults[entry.url][testId] = result;
+      } catch { allResults[entry.url][testId] = null; }
     }
   }
 
@@ -952,6 +1020,7 @@ async function runCompare() {
   const testNameMap = {};
   TESTS.forEach(t => { testNameMap[t.id] = t.name; });
 
+  const urls = entries.map(e => e.url);
   const headerCells = urls.map(u => `<th>${new URL(u).hostname}</th>`).join('');
   const rows = testIds.map(tid => {
     const cells = urls.map(u => {
